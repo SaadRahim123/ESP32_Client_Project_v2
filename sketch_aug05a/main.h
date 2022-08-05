@@ -44,6 +44,13 @@ enum enumOutTask
 *   Structures
 */  
 
+struct callbackStruct
+{
+    char payload[500];
+    char topic[100];
+    bool dataArrives;
+};
+
 typedef struct time_struct
 {
     char timeStr[100];

@@ -23,8 +23,8 @@ Buttons buttons;
 
 #define DELAY_500MS pdMS_TO_TICKS(500)
 #define DELAY_10MS pdMS_TO_TICKS(10)
-const char *ssid = "PTCL-I80";
-const char *password = "sherlocked";
+const char *ssid = "RGXDeveloper";
+const char *password = "rgxdeveloper";
 WiFiClient espClient;
 PubSubClient client(espClient);
 unsigned long lastMsg = 0;
@@ -47,6 +47,16 @@ const char *mqtt_ID = "esp32a01";
 const char *mqtt_username = "remote2";
 const char *mqtt_password = "password2";
 const char *mqtt_client = "ESP32A01";
+
+
+
+/*
+*   Callback Struct
+*/
+
+
+struct callbackStruct callback_data;
+
 
 //// MQTT Broker
 //const char *mqtt_broker = "broker.hivemq.com";//"broker.emqx.io";
@@ -78,10 +88,12 @@ void InputTask(void *pvParam);
 void OutputTask(void *pvParam);
 void MQTT_Task(void *pvParam);
 void OLED_DisplayTask(void *pvParam);
+void CallbackTask(void *pvParam);
+Struct_Output outputDataCallback;
 
 // Task Handlers
 TaskHandle_t Initialization_Task_Handler, Input_Task_Handler, Output_Task_Handler, Display_Task_Handler;
-TaskHandle_t MQTT_Task_Handler;
+TaskHandle_t MQTT_Task_Handler, Callback_Task_Handler;
 
 void setup() {
   // put your setup code here, to run once:
@@ -133,6 +145,8 @@ void setup() {
   xTaskCreatePinnedToCore(InputTask, "Input Task", 5120, NULL, 3, &Input_Task_Handler, 0);
   // Output Task
   xTaskCreatePinnedToCore(OutputTask, "Output Task", 2048, NULL, 3, &Output_Task_Handler, 0);
+  // Call back task
+  xTaskCreatePinnedToCore(CallbackTask, "callback Task ", 2048, NULL, 3, &Callback_Task_Handler, 0);
 }
 
 unsigned long timeNow;
@@ -142,13 +156,13 @@ void getUptime() {
   Time_t.seconds = Time_t.upSeconds % 60;
   Time_t.minutes = (Time_t.upSeconds / 60) % 60;
   Time_t.hours = (Time_t.upSeconds / (60 * 60)) % 24;
-  Time_t.days = (Time_t.rollover * 50) + (Time_t.upSeconds / (60 * 60 * 24)); // 50 day rollover
+  Time_t.days = (Time_t.rollover * 50) + (Time_t.upSeconds / (60 * 60 * 24));  // 50 day rollover
 
   sprintf(Time_t.timeStr, "%02d %02d:%02d:%02d", Time_t.days, Time_t.hours, Time_t.minutes, Time_t.seconds);
- // Serial.println(Time_t.timeStr);  // Uncomment to serial print
+  // Serial.println(Time_t.timeStr);  // Uncomment to serial print
 }
 
-Struct_MQTT mqttSendDataBuffer , mqttSendDataPeriodicBuffer;
+Struct_MQTT mqttSendDataBuffer, mqttSendDataPeriodicBuffer;
 
 void InitializationTask(void *pvParam) {
   //  Struct_MQTT mqttSendDataBuffer;
@@ -159,14 +173,13 @@ void InitializationTask(void *pvParam) {
   char rpmChr[30];
   while (1) {
     if (!client.connected()) {
-      sprintf(oledMessage.body , "Attempting Re-connection ");
-      xQueueSend(oledQueue, (void *) &oledMessage , portMAX_DELAY);
+      sprintf(oledMessage.body, "Attempting Re-connection ");
+      xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
       reconnect();
-      sprintf(oledMessage.body , "MQTT Connected ");
-      xQueueSend(oledQueue, (void *) &oledMessage , portMAX_DELAY);
-      sprintf(oledMessage.body , "Subscribing... ");
-      xQueueSend(oledQueue, (void *) &oledMessage , portMAX_DELAY);
-      
+      sprintf(oledMessage.body, "MQTT Connected ");
+      xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
+      sprintf(oledMessage.body, "Subscribing... ");
+      xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
     }
     client.loop();
 
@@ -176,10 +189,10 @@ void InitializationTask(void *pvParam) {
       getUptime();
       // Sending WiFi RSSI Value
       publishMQTTPeriodicMessage("wifi", Wifi.getRssiAsQuality());
-      publishMQTTPeriodicMessage("uptime" , Time_t.timeStr);
-      
+      publishMQTTPeriodicMessage("uptime", Time_t.timeStr);
+
       snprintf(rpmChr, sizeof(rpmChr), "%d", rpm);
-      publishMQTTPeriodicMessage("tacho", rpmChr);            
+      publishMQTTPeriodicMessage("tacho", rpmChr);
     }
 
 
@@ -233,6 +246,85 @@ void MQTT_Task(void *pvParam) {
   }
 }
 
+void CallbackTask(void *pvParam) {
+  
+
+  while (1) {
+
+    if ((callback_data.dataArrives)) {
+
+      Serial.println("Here in the CallbackTask");
+      callback_data.dataArrives = false;
+
+
+ char *payloadId = strtok(callback_data.topic, "/");
+  char *payloadFunc = strtok(NULL, "/");
+  // Break payload down
+  char *payloadName = strtok(callback_data.payload, "/");
+  char *payloadData = strtok(NULL, "/");
+
+  Serial.print("ID: ");
+  Serial.print(payloadId);
+  Serial.print(" Function: ");
+  Serial.print(payloadFunc);
+  Serial.print(" Name: ");
+  Serial.print(payloadName);
+  Serial.print(" Data: ");
+  Serial.println(payloadData);
+
+    // If topic is a set
+    if (strcmp(payloadFunc, "set") == 0) {
+      Nvs.set(payloadName, payloadData);
+      char* reply = Nvs.get(payloadName);
+      //publishMQTTMessage("reply", reply);
+    }
+    // If topic is a get
+    if (strcmp(payloadFunc, "get") == 0) {
+      char* reply = Nvs.get(payloadName);
+      publishMQTTMessage("reply", reply);
+    }
+
+    if (strcmp(payloadFunc, "output") == 0) {
+      outputDataCallback.ID = PROCESS_OUT;
+      sprintf(outputDataCallback.topic , callback_data.payload);
+      sprintf(outputDataCallback.payload ,payloadData);
+      xQueueSend(outputQueue, (void*) &outputDataCallback , portMAX_DELAY);
+      Serial.println("Callback Data output ");
+
+
+    }
+
+    if (strcmp(payloadFunc, "timer") == 0) {
+     // Timer.start(payloadAsChar);
+      return;
+    }
+
+    if (strcmp(payloadFunc, "system") == 0) {
+
+      if (strcmp(payloadName, "publish") == 0) {
+        SetPublishInputMessageEnable(!isPublishInputMessageEnable);
+        Serial.print("Publish input messages: ");
+        Serial.println(isPublishInputMessageEnable);
+      }
+
+      if (strcmp(payloadName, "restart") == 0) {
+        Serial.println("Resetting ESP32");
+        ESP.restart();
+        return;
+      }
+
+      if (strcmp(payloadName, "save") == 0) {
+        Nvs.save();
+      }
+
+      if (strcmp(payloadName, "erase") == 0) {
+        Nvs.erase();
+      }
+    }      
+    }
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
+}
 
 void OutputTask(void *pvParam) {
 
@@ -242,8 +334,8 @@ void OutputTask(void *pvParam) {
   while (1) {
     if (xQueueReceive(outputQueue, (void *)&outputStructData, portMAX_DELAY) == pdTRUE) {
 
-          Serial.println("Output Task Request");      
-          switch (outputStructData.ID) {
+      Serial.println("Output Task Request");
+      switch (outputStructData.ID) {
         case PROCESS_OUT:
 
           Output.process(outputStructData.topic, outputStructData.payload);
@@ -326,20 +418,20 @@ void InputTask(void *pvParam) {
           Serial.println("relayTwo triggered");
           outputQueueData.ID = START_OUT;
           sprintf(outputQueueData.topic, "replayTwo");
-            xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
+          xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
           //Output.start("relayTwo");
         }
         if (buttonCounter == 2) {
           outputQueueData.ID = START_OUT;
           sprintf(outputQueueData.topic, "relayThree");
-            xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
+          xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
           //Output.start("relayThree");
           Serial.println("relayThree triggered");
         }
         if (buttonCounter == 3) {
           outputQueueData.ID = START_OUT;
           sprintf(outputQueueData.topic, "relayFour");
-            xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
+          xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
           //Output.start("relayFour");
           Serial.println("relayFour triggered");
         }
@@ -349,7 +441,7 @@ void InputTask(void *pvParam) {
       if (strcmp(inputMessage, "inSix/1") == 0) {
         outputQueueData.ID = START_OUT;
         sprintf(outputQueueData.topic, "transOne");
-          xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
+        xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
         Serial.println("transOne triggered");
         // Output.start("transOne");
       }
@@ -357,7 +449,7 @@ void InputTask(void *pvParam) {
       if (strcmp(inputMessage, "inOne/1") == 0) {
         outputQueueData.ID = START_OUT;
         sprintf(outputQueueData.topic, "relayOne");
-          xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
+        xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
         Serial.println("relayOne triggered");
         //Output.start("relayOne");
       }
@@ -365,7 +457,7 @@ void InputTask(void *pvParam) {
       if (strcmp(inputMessage, "inSeven/1") == 0) {
         outputQueueData.ID = START_OUT;
         sprintf(outputQueueData.topic, "relayZero");
-          xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
+        xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
         Serial.println("relayZero triggered");
         //      Timer.start("timerOne");
         // Output.start("relayZero");
@@ -411,116 +503,27 @@ void OLED_DisplayTask(void *pvParam) {
 void loop() {
 }
 
-Struct_Output outputDataCallback;
 
-struct callbackStruct
-{
-    char payload[500];
-    char topic[100];
-       
-};
 
-struct callbackStruct callback_data;
-char *topic;
+
+char *payloadAsChar = "";
 void callback(char *topic, byte *payload, unsigned int length) {
-  
-  const char NULL_terminator[2] = "\0";
+
+  //Conver *byte to char*
+  payload[length] = '\0';  //First terminate payload with a NULL
+  payloadAsChar = (char *)payload;
+  // Break topic down
+
+
+  memcpy(callback_data.payload, payload, length);
+  memcpy(callback_data.topic, topic, strlen(topic));
+
+  Serial.print("  Payload");
+  Serial.println(callback_data.payload);
+  Serial.print("  topic");
+  Serial.println(callback_data.topic);
+  callback_data.dataArrives = true;
  
-
-  Serial.print("Message arrived [");
-  Serial.print(callback_data.topic);
-  Serial.print("] ");
-  
-  for(uint8_t i =0 ; i< length; i++ )
-  {
-    callback_data.payload[i] = (char)payload[i];
-  }
-
-    // Break topic down
-  char *payloadId = strtok(callback_data.topic, "/");
-  char *payloadFunc = strtok(NULL_terminator, "/");
-  // Break payload down
-  char *payloadName = strtok(payloadAsChar, "/");
-  char *payloadData = strtok(NULL_terminator, "/");
-  callback_data.payload[length] = NULL_terminator;
-
-  Serial.print("ID: ");
-  Serial.print(payloadId);
-  Serial.print(" Function: ");
-  Serial.print(payloadFunc);
-  Serial.print(" Name: ");
-  Serial.print(payloadName);
-  Serial.print(" Data: ");
-  Serial.println(payloadData);
-  
-  //    //Conver *byte to char* 
-//   payload[length] = '\0';   //First terminate payload with a NULL
-//  payloadAsChar = (char*)payload;
-//   // Break topic down
-//   char *payloadId = strtok(topic, "/");
-//   char *payloadFunc = strtok("\0", "/");
-//   // Break payload down
-//   char *payloadName = strtok(payloadAsChar, "/");
-//   char *payloadData = strtok("\0", "/");
-
-//   Serial.print("ID: ");
-//   Serial.print(payloadId);
-//   Serial.print(" Function: ");
-//   Serial.print(payloadFunc);
-//   Serial.print(" Name: ");
-//   Serial.print(payloadName);
-//   Serial.print(" Data: ");
-//   Serial.println(payloadData);
-
-//   // If topic is a set
-//   if (strcmp(payloadFunc, "set") == 0) {
-//     Nvs.set(payloadName, payloadData);
-//     char* reply = Nvs.get(payloadName);
-//     //publishMQTTMessage("reply", reply);
-//   }
-//   // If topic is a get
-//   if (strcmp(payloadFunc, "get") == 0) {
-//     char* reply = Nvs.get(payloadName);
-//     publishMQTTMessage("reply", reply);
-//   }
-
-//   if (strcmp(payloadFunc, "output") == 0) {
-//     // outputDataCallback.ID = PROCESS_OUT;
-//     // sprintf(outputDataCallback.topic , payloadAsChar);
-//     // sprintf(outputDataCallback.payload ,payloadData);
-//     // xQueueSend(outputQueue, (void*) &outputDataCallback , portMAX_DELAY);
-//     Serial.println("Callback Data output ");
-
-
-//   }
-
-//   if (strcmp(payloadFunc, "timer") == 0) {
-//    // Timer.start(payloadAsChar);
-//     return;
-//   }
-
-//   if (strcmp(payloadFunc, "system") == 0) {
-
-//     if (strcmp(payloadName, "publish") == 0) {
-//       SetPublishInputMessageEnable(!isPublishInputMessageEnable);
-//       Serial.print("Publish input messages: ");
-//       Serial.println(isPublishInputMessageEnable);
-//     }
-
-//     if (strcmp(payloadName, "restart") == 0) {
-//       Serial.println("Resetting ESP32");
-//       ESP.restart();
-//       return;
-//     }
-
-//     if (strcmp(payloadName, "save") == 0) {
-//       Nvs.save();
-//     }
-
-//     if (strcmp(payloadName, "erase") == 0) {
-//       Nvs.erase();
-//     }
-//   }
 }
 
 
@@ -582,13 +585,12 @@ void reconnect() {
   }
 }
 
-void publishMQTTPeriodicMessage(char topic[], char payload[])
-{
+void publishMQTTPeriodicMessage(char topic[], char payload[]) {
 
   sprintf(mqttSendDataPeriodicBuffer.topic, topic);
   sprintf(mqttSendDataPeriodicBuffer.payload, payload);
   mqttSendDataPeriodicBuffer.ID = IDPUBLISHMQTT;
-  xQueueSend(mqttQueue, (void *)&mqttSendDataPeriodicBuffer, portMAX_DELAY);  
+  xQueueSend(mqttQueue, (void *)&mqttSendDataPeriodicBuffer, portMAX_DELAY);
 }
 
 void publishMQTTMessage(char topic[], char payload[]) {

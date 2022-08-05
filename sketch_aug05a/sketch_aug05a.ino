@@ -14,6 +14,8 @@
 #include "memory.hpp"
 #include "main.h"
 
+
+_Timer Timer; 
 _Wifi Wifi;
 _Output Output;
 _Input Input;
@@ -23,8 +25,8 @@ Buttons buttons;
 
 #define DELAY_500MS pdMS_TO_TICKS(500)
 #define DELAY_10MS pdMS_TO_TICKS(10)
-const char *ssid = "RGXDeveloper";
-const char *password = "rgxdeveloper";
+const char *ssid = "PTCL-I80";
+const char *password = "sherlocked";
 WiFiClient espClient;
 PubSubClient client(espClient);
 unsigned long lastMsg = 0;
@@ -166,8 +168,10 @@ Struct_MQTT mqttSendDataBuffer, mqttSendDataPeriodicBuffer;
 
 void InitializationTask(void *pvParam) {
   //  Struct_MQTT mqttSendDataBuffer;
+  Struct_Output outputStructData;  
   unsigned long periodicTimer = 0;
   unsigned long periodicTimerCheck;
+  unsigned long periodicTimerOutput = 0;
   gUartMessage oledMessage;
   uint8_t index;
   char rpmChr[30];
@@ -184,6 +188,16 @@ void InitializationTask(void *pvParam) {
     client.loop();
 
     periodicTimerCheck = millis();
+
+    // updating the outputs
+    if (periodicTimerCheck - periodicTimerOutput > FIVE_HUN_MILL)    
+    {
+      periodicTimerOutput = periodicTimerCheck; 
+      outputStructData.ID = UPDATE_OUT;
+      xQueueSend(outputQueue, (void *)&outputStructData, portMAX_DELAY);
+    }
+
+
     if (periodicTimerCheck - periodicTimer > THREE_SEC) {
       periodicTimer = periodicTimerCheck;
       getUptime();
@@ -213,13 +227,13 @@ void MQTT_Task(void *pvParam) {
         //        result = (char *)pvPortMalloc(strlen(dataArray) + 1);
         switch ((mqttData.ID)) {
           case IDPUBLISHMQTT:
-            Serial.print("ID Publish MQTT");
+            // Serial.print("ID Publish MQTT");
             memset(dataArray, 0, 100);
             snprintf(dataArray, 100, "%s/%s", mqtt_ID, mqttData.topic);
             client.publish(dataArray, mqttData.payload);
-            Serial.print(dataArray);
-            Serial.print("/");
-            Serial.println(mqttData.payload);
+            // Serial.print(dataArray);
+            // Serial.print("/");
+            // Serial.println(mqttData.payload);
             //            vPortFree(result);          // Freeing the memory
             break;
 
@@ -334,7 +348,7 @@ void OutputTask(void *pvParam) {
   while (1) {
     if (xQueueReceive(outputQueue, (void *)&outputStructData, portMAX_DELAY) == pdTRUE) {
 
-      Serial.println("Output Task Request");
+      //Serial.println("Output Task Request");
       switch (outputStructData.ID) {
         case PROCESS_OUT:
 
@@ -350,8 +364,9 @@ void OutputTask(void *pvParam) {
           break;
 
         case UPDATE_OUT:
-          timeNow = millis();
+          timeNow = millis();          
           // check if output is on before checking if its a 0
+          //Serial.println("Updating the outputs");          
           for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
 
             if (outputData[i].outputState == true) {
@@ -391,12 +406,13 @@ void InputTask(void *pvParam) {
   unsigned int revTime;
   unsigned long lastTachoTime = 0;
   unsigned long timeNow;
+  bool inputBool = false;
   while (1) {
 
     // if (buttons.pressed() == Buttons::SELECT) {
     //   publishMQTTMessage("button", "SELECT" );
     // }
-
+    Timer.update();
     if (GetPublishInputMessageEnable()) {  // Only publish if switched on
       Input.update(inputMessage);
       if (inputMessage != "none") {
@@ -480,7 +496,16 @@ void InputTask(void *pvParam) {
       }
     }
 
-
+  if (Timer.state("timerTwo") == false) {
+    if ( inputBool == false) {
+      Timer.start("timerTwo");
+      publishMQTTMessage("input", "inZero/1");
+      inputBool = true;
+    }
+    Timer.start("timerTwo");
+    publishMQTTMessage("input", "inZero/0");
+    inputBool = false;
+  }
 
     vTaskDelay(pdMS_TO_TICKS(10));
   }
@@ -509,11 +534,22 @@ void loop() {
 char *payloadAsChar = "";
 void callback(char *topic, byte *payload, unsigned int length) {
 
+  // Clearing the global string buffers
+  memset(callback_data.topic, 0 , 100);
+  memset(callback_data.payload , 0 , 500);
   //Conver *byte to char*
   payload[length] = '\0';  //First terminate payload with a NULL
   payloadAsChar = (char *)payload;
   // Break topic down
+  Serial.print("Message arrived [");
+    Serial.print(topic);
+    Serial.print("] ");
 
+    for (int i = 0; i < length; i++) {
+      Serial.print((char)payload[i]);
+      callback_data.payload[i] =  (char)payload[i];
+    }
+    Serial.println();
 
   memcpy(callback_data.payload, payload, length);
   memcpy(callback_data.topic, topic, strlen(topic));
@@ -586,7 +622,10 @@ void reconnect() {
 }
 
 void publishMQTTPeriodicMessage(char topic[], char payload[]) {
-
+  
+  memset(mqttSendDataPeriodicBuffer.topic , 0 , 100); 
+  memset(mqttSendDataPeriodicBuffer.payload , 0 , 100);
+  
   sprintf(mqttSendDataPeriodicBuffer.topic, topic);
   sprintf(mqttSendDataPeriodicBuffer.payload, payload);
   mqttSendDataPeriodicBuffer.ID = IDPUBLISHMQTT;
@@ -594,6 +633,9 @@ void publishMQTTPeriodicMessage(char topic[], char payload[]) {
 }
 
 void publishMQTTMessage(char topic[], char payload[]) {
+    
+  memset(mqttSendDataBuffer.topic , 0 , 100); 
+  memset(mqttSendDataBuffer.payload , 0 , 100);
   sprintf(mqttSendDataBuffer.topic, topic);
   sprintf(mqttSendDataBuffer.payload, payload);
   mqttSendDataBuffer.ID = IDPUBLISHMQTT;

@@ -30,13 +30,13 @@ class _Timer {
           if (timerData[i].timerState == false) {
             timerData[i].timerState = true;
             timerData[i].timerStartTime = timeNow;
-            Serial.print(startMessage);
-            Serial.println(" started");
+            // Serial.print(startMessage);
+            // Serial.println(" started");
             return;
           }
           else {
-            Serial.print(timerData[i].timerName);
-            Serial.println(" is already ON");
+            // Serial.print(timerData[i].timerName);
+            // Serial.println(" is already ON");
             return;
           }
         }
@@ -52,8 +52,8 @@ class _Timer {
           string nameStr(timerData[i].timerName);
           if (timeNow - timerData[i].timerStartTime >= settings[nameStr]) {
             timerData[i].timerState = false;
-            Serial.print(timerData[i].timerName);
-            Serial.println(" has timed out");
+            // Serial.print(timerData[i].timerName);
+            // Serial.println(" has timed out");
             return;
           }
         }

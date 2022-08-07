@@ -1,14 +1,14 @@
 #include "defs.hpp"
 #include "oled.hpp"
-
-class Buttons {
-  public:
     enum Button {
       NONE,
       UP,
       DOWN,
       SELECT,
     };
+class Buttons {
+  public:
+
 
     void begin() {
       pinMode(BUTTONS, INPUT);
@@ -18,7 +18,7 @@ class Buttons {
 
     Button pressed() {
       timeNow = millis();
-      buttonValue = analogRead(BUTTONS);
+      buttonValue = analogRead(BUTTONS); 
 
      // Serial.print("AnalogRead: ");
      // Serial.println(buttonValue);              // Uncomment to print button value
@@ -38,22 +38,22 @@ class Buttons {
             Serial.println("Button SELECT pressed");
             //  Oled.displayln("Button SELECT pressed");
             pushed = true;
-            return Button::SELECT;
+            return SELECT;
           }
           else if (buttonValue > 2000 && buttonValue < 2300) {     // AE-01 Settings
             Serial.println("Button DOWN pressed");
             // Oled.displayln("Button DOWN pressed");
             pushed = true;
-            return Button::DOWN;
+            return DOWN;
           }
           else if (buttonValue > 1200 && buttonValue < 1600) {    // AE-01 Settings
             Serial.println("Button UP pressed");
             // Oled.displayln("Button UP pressed");
             pushed = true;
-            return Button::UP;
+            return UP;
           }
           // Serial.println("Button NONE");
-          return Button::NONE;
+          return NONE;
         }    
       }
       lastButtonValue = buttonValue;      // Update      

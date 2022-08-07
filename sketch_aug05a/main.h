@@ -80,6 +80,17 @@ typedef struct Message
   int count;
 } gUartMessage;
 
+
+
+
+
+
+
+
+
+
+
+
 // Function prototypes
 void reconnect(void);
 
@@ -90,3 +101,10 @@ void SetMQTTConnectionStatus(bool);
 
 // This function is used to get the MQTT Connection Status
 bool GetMQTTConnectionStatus(void);
+
+
+// This function is used to get the WiFi Connection Status
+bool GetIsWiFiConnected();
+
+// This function is used to set the WiFi Connection Status
+void SetIsWiFiConnected(bool value);

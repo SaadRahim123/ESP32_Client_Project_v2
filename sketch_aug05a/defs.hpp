@@ -1,4 +1,6 @@
 #pragma once
+#include "main.h"
+
 
 #define WDT_TIMEOUT     5
 #define SD_CS_PIN       5
@@ -8,4 +10,19 @@
 #define BUTTONS         36    // Analog input AE-02 pin 34, AE-06 pin 36, AE-01 pin 32
 //#define TEMP_DATA_PIN   7     // DS18B20 data pin 
 
-        
+
+/*
+* RTOs defines
+*/
+// 
+#define PERIODIC_MESSAGE_TIMEOUT        THREE_SEC
+
+
+
+
+
+
+
+// For Static Configuration Please enter the credentials here
+const char *ssid = "PTCL-I80";
+const char *password = "sherlocked";

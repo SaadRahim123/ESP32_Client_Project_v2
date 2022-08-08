@@ -80,12 +80,16 @@ void MQTT_Task(void *pvParam);
 void OLED_DisplayTask(void *pvParam);
 void CallbackTask(void *pvParam);
 void InputTask(void *pvParam);
+void InternetTask(void *pvParam);
+
+
+
 
 Struct_Output outputDataCallback;
 
 // Task Handlers
 TaskHandle_t Initialization_Task_Handler, Input_Task_Handler, Output_Task_Handler, Display_Task_Handler;
-TaskHandle_t MQTT_Task_Handler, Callback_Task_Handler;
+TaskHandle_t MQTT_Task_Handler, Callback_Task_Handler, Internet_Task_Handler;
 
 void setup() {
   // put your setup code here, to run once:
@@ -105,6 +109,12 @@ void setup() {
 
 #ifdef DYNAMIC_WIFI
   isWiFiConnected = Wifi.connect();
+  if (isWiFiConnected) {
+    Serial.println("isWiFiConnected");
+  } else {
+    Serial.println("WiFi not conneccted");
+  }
+
 #else
   WiFi.mode(WIFI_AP_STA);
   WiFi.begin(ssid, password);
@@ -123,6 +133,8 @@ void setup() {
   Serial.println("Connected ");
   client.setServer(mqtt_broker, 1883);
   client.setCallback(callback);
+
+
 
 
   /*
@@ -151,6 +163,8 @@ void setup() {
   xTaskCreatePinnedToCore(OutputTask, "Output Task", 2048, NULL, 3, &Output_Task_Handler, 0);
   // Call back task
   xTaskCreatePinnedToCore(CallbackTask, "callback Task ", 2048, NULL, 3, &Callback_Task_Handler, 0);
+  // Internet Task
+
 }
 
 unsigned long timeNow;
@@ -178,39 +192,48 @@ void InitializationTask(void *pvParam) {
   uint8_t index;
   char rpmChr[30];
   while (1) {
-    if (!client.connected()) {
-      sprintf(oledMessage.body, "Attempting Re-connection ");
-      xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
-      reconnect();
-      sprintf(oledMessage.body, "MQTT Connected ");
-      xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
-      sprintf(oledMessage.body, "Subscribing... ");
-      xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
+    if (GetIsWiFiConnected()) {
+      if (!client.connected()) {
+        sprintf(oledMessage.body, "Attempting Re-connection ");
+        xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
+        reconnect();
+        sprintf(oledMessage.body, "MQTT Connected ");
+        xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
+        sprintf(oledMessage.body, "Subscribing... ");
+        xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
+      }
+
+
+      client.loop();
+      periodicTimerCheck = millis();
+
+      // updating the outputs
+      if (periodicTimerCheck - periodicTimerOutput > FIVE_HUN_MILL) {
+        periodicTimerOutput = periodicTimerCheck;
+        outputStructData.ID = UPDATE_OUT;
+        xQueueSend(outputQueue, (void *)&outputStructData, portMAX_DELAY);
+      }
+
+
+      if (periodicTimerCheck - periodicTimer > PERIODIC_MESSAGE_TIMEOUT) {
+        periodicTimer = periodicTimerCheck;
+        getUptime();
+        // Sending WiFi RSSI Value
+        publishMQTTPeriodicMessage("wifi", Wifi.getRssiAsQuality());
+        publishMQTTPeriodicMessage("uptime", Time_t.timeStr);
+
+        snprintf(rpmChr, sizeof(rpmChr), "%d", rpm);
+        publishMQTTPeriodicMessage("tacho", rpmChr);
+      }
     }
-    client.loop();
-
-    periodicTimerCheck = millis();
-
-    // updating the outputs
-    if (periodicTimerCheck - periodicTimerOutput > FIVE_HUN_MILL) {
-      periodicTimerOutput = periodicTimerCheck;
-      outputStructData.ID = UPDATE_OUT;
-      xQueueSend(outputQueue, (void *)&outputStructData, portMAX_DELAY);
+    if((Wifi.GetWiFiBlockingState() == false) && GetIsWiFiConnected() == false )  
+    {
+      Wifi.process();
     }
-
-
-    if (periodicTimerCheck - periodicTimer > PERIODIC_MESSAGE_TIMEOUT) {
-      periodicTimer = periodicTimerCheck;
-      getUptime();
-      // Sending WiFi RSSI Value
-      publishMQTTPeriodicMessage("wifi", Wifi.getRssiAsQuality());
-      publishMQTTPeriodicMessage("uptime", Time_t.timeStr);
-
-      snprintf(rpmChr, sizeof(rpmChr), "%d", rpm);
-      publishMQTTPeriodicMessage("tacho", rpmChr);
-    }
-
-
+    if(WiFi.status() == WL_CONNECTED)
+    {
+        SetIsWiFiConnected(true);      
+    }        
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
@@ -257,7 +280,7 @@ void MQTT_Task(void *pvParam) {
       }
     }
     // Yielding the task in case of Connection not established
-    taskYIELD();
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
 
@@ -424,7 +447,7 @@ void InputTask(void *pvParam) {
   bool inputBool = false;
   BaseType_t timerTwoState;
   bool pushed = false;
-  unsigned long  lastDebounceTime;
+  unsigned long lastDebounceTime;
   int buttonValue, lastButtonValue;
   enum Button outputButton;
   while (1) {
@@ -450,27 +473,26 @@ void InputTask(void *pvParam) {
           Serial.println("Button SELECT pressed");
           //  Oled.displayln("Button SELECT pressed");
           pushed = true;
-          outputButton =  SELECT;
+          outputButton = SELECT;
         } else if (buttonValue > 2000 && buttonValue < 2300) {  // AE-01 Settings
           Serial.println("Button DOWN pressed");
           // Oled.displayln("Button DOWN pressed");
           pushed = true;
-          outputButton =  DOWN;
+          outputButton = DOWN;
         } else if (buttonValue > 1200 && buttonValue < 1600) {  // AE-01 Settings
           Serial.println("Button UP pressed");
           // Oled.displayln("Button UP pressed");
           pushed = true;
-          outputButton =  UP;
+          outputButton = UP;
         }
         // Serial.println("Button NONE");
-        outputButton =  NONE;
+        outputButton = NONE;
       }
     }
     lastButtonValue = buttonValue;  // Update
 
 
-    if (outputButton == SELECT)
-    {
+    if (outputButton == SELECT) {
       PublishMQTTInputMessage("button", "SELECT");
     }
 

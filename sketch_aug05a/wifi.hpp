@@ -3,15 +3,21 @@
 #include <WiFiManager.h>
 #include "oled.hpp"
 
+
+
 class _Wifi {
   public:
 
+    void process()
+    {
+      wifiManager.process();
+    }
     bool connect() {
 
       //WiFi.mode(WIFI_AP); // explicitly set mode, esp defaults to STA+AP
-      //wifiManager.resetSettings();
-
-      wifiManager.setConfigPortalBlocking(true);
+     wifiManager.resetSettings();
+      SetWiFiBlockingState(false);
+      wifiManager.setConfigPortalBlocking(isWiFiBlockingState);
       wifiManager.setConfigPortalTimeout(180);
       delay(500);
       if (wifiManager.autoConnect("ESP32")) {  //automatically connect using saved credentials if connection fails it starts an access point
@@ -22,7 +28,6 @@ class _Wifi {
         Serial.print(" %");
         Serial.print(" Dbm: ");
         Serial.println(WiFi.RSSI());
-
         return true;
       }
       else {
@@ -33,6 +38,15 @@ class _Wifi {
       }
     }
 
+    bool GetWiFiBlockingState()
+    {
+        return isWiFiBlockingState;
+    }
+
+    void SetWiFiBlockingState(bool value)
+    {
+        isWiFiBlockingState = value;      
+    }
     char* getRssiAsQuality() {
       int rssi = WiFi.RSSI();
       int quality = 0;
@@ -54,6 +68,7 @@ class _Wifi {
     }
 
   public:
+    bool isWiFiBlockingState = false;
     WiFiManager wifiManager;
     char wifiStr[5];
 

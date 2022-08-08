@@ -1,6 +1,8 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
+
+
 /*
 *   Defines
 */
@@ -77,7 +79,14 @@ typedef struct Message
 } gUartMessage;
 
 
-
+// MQTT Queue
+QueueHandle_t mqttQueue;
+// Handles for Queues
+QueueHandle_t serialWriteQueue;
+// oled Queue
+QueueHandle_t oledQueue;
+// output Queue
+QueueHandle_t outputQueue;
 
 
 

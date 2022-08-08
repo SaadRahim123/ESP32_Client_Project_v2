@@ -52,14 +52,7 @@ const char *mqtt_client = "ESP32A01";
 struct callbackStruct callback_data;
 
 t_struct Time_t;
-// MQTT Queue
-QueueHandle_t mqttQueue;
-// Handles for Queues
-QueueHandle_t serialWriteQueue;
-// oled Queue
-QueueHandle_t oledQueue;
-// output Queue
-QueueHandle_t outputQueue;
+
 
 // Timers Handler
 TimerHandle_t timerTwoOneShotHandler = NULL;
@@ -80,16 +73,15 @@ void MQTT_Task(void *pvParam);
 void OLED_DisplayTask(void *pvParam);
 void CallbackTask(void *pvParam);
 void InputTask(void *pvParam);
-void InternetTask(void *pvParam);
 
 
 
 
-Struct_Output outputDataCallback , outputStructDataInitialization;
+Struct_Output outputDataCallback, outputStructDataInitialization;
 
 // Task Handlers
 TaskHandle_t Initialization_Task_Handler, Input_Task_Handler, Output_Task_Handler, Display_Task_Handler;
-TaskHandle_t MQTT_Task_Handler, Callback_Task_Handler, Internet_Task_Handler;
+TaskHandle_t MQTT_Task_Handler, Callback_Task_Handler;
 
 // MQTT Structs
 Struct_MQTT mqttSendDataBuffer, mqttSendDataPeriodicBuffer, mqttSendInputMessage;
@@ -114,12 +106,6 @@ void setup() {
 
 #ifdef DYNAMIC_WIFI
   isWiFiConnected = Wifi.connect();
-  if (isWiFiConnected) {
-    Serial.println("isWiFiConnected");
-  } else {
-    Serial.println("WiFi not conneccted");
-  }
-
 #else
   WiFi.mode(WIFI_AP_STA);
   WiFi.begin(ssid, password);
@@ -169,11 +155,11 @@ void setup() {
   // Call back task
   xTaskCreatePinnedToCore(CallbackTask, "callback Task ", 2048, NULL, 3, &Callback_Task_Handler, 0);
   // Internet Task
-
 }
 
-unsigned long timeNow;
+
 void getUptime() {
+  unsigned long timeNow;
   timeNow = millis();
   Time_t.upSeconds = timeNow / 1000;
   Time_t.seconds = Time_t.upSeconds % 60;
@@ -188,7 +174,7 @@ void getUptime() {
 
 void InitializationTask(void *pvParam) {
   //  Struct_MQTT mqttSendDataBuffer;
-  Struct_Output outputStructData , outputStructDataInitialization;
+  Struct_Output outputStructData, outputStructDataInitialization;
   unsigned long periodicTimer = 0;
   unsigned long periodicTimerCheck;
   unsigned long periodicTimerOutput = 0;
@@ -214,7 +200,7 @@ void InitializationTask(void *pvParam) {
       // updating the outputs
       if (periodicTimerCheck - periodicTimerOutput > FIVE_HUN_MILL) {
         periodicTimerOutput = periodicTimerCheck;
-        SendMessageToOutputTaskInit( UPDATE_OUT);   
+        SendMessageToOutputTaskInit(UPDATE_OUT);
       }
 
 
@@ -229,14 +215,12 @@ void InitializationTask(void *pvParam) {
         publishMQTTPeriodicMessage("tacho", rpmChr);
       }
     }
-    if((Wifi.GetWiFiBlockingState() == false) && GetIsWiFiConnected() == false )  
-    {
+    if ((Wifi.GetWiFiBlockingState() == false) && GetIsWiFiConnected() == false) {
       Wifi.process();
     }
-    if(WiFi.status() == WL_CONNECTED)
-    {
-        SetIsWiFiConnected(true);      
-    }        
+    if (WiFi.status() == WL_CONNECTED) {
+      SetIsWiFiConnected(true);
+    }
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
@@ -586,7 +570,7 @@ void InputTask(void *pvParam) {
       isTimerStartRequested = true;
     }
 
-    if (isTimerTwoExpired == true  && GetIsWiFiConnected()) {
+    if (isTimerTwoExpired == true && GetIsWiFiConnected()) {
       PublishMQTTInputMessage("input", "inZero/1");
       isTimerTwoExpired = false;
       isTimerStartRequested = false;
@@ -679,22 +663,20 @@ void reconnect() {
   }
 }
 
-void SendMessageToOutputTaskInit(enum enumOutTask y)
-{
-  
+void SendMessageToOutputTaskInit(enum enumOutTask y) {
+
   outputStructDataInitialization.ID = y;
   xQueueSend(outputQueue, (void *)&outputStructDataInitialization, portMAX_DELAY);
 }
 
 
-void SendMessageToOutputTask(char topic[] , char payload[], enum enumOutTask x)
-{
-    memset(outputDataCallback.topic, 0, 100);
-    memset(outputDataCallback.payload, 0, 100);
-    sprintf(outputDataCallback.topic, topic);
-    sprintf(outputDataCallback.payload, payload);
-    outputDataCallback.ID = x;
-   xQueueSend(outputQueue, (void *)&outputDataCallback, portMAX_DELAY);
+void SendMessageToOutputTask(char topic[], char payload[], enum enumOutTask x) {
+  memset(outputDataCallback.topic, 0, 100);
+  memset(outputDataCallback.payload, 0, 100);
+  sprintf(outputDataCallback.topic, topic);
+  sprintf(outputDataCallback.payload, payload);
+  outputDataCallback.ID = x;
+  xQueueSend(outputQueue, (void *)&outputDataCallback, portMAX_DELAY);
 }
 
 void PublishMQTTInputMessage(char topic[], char payload[]) {
@@ -703,7 +685,9 @@ void PublishMQTTInputMessage(char topic[], char payload[]) {
   sprintf(mqttSendInputMessage.topic, topic);
   sprintf(mqttSendInputMessage.payload, payload);
   mqttSendInputMessage.ID = IDPUBLISHMQTT;
-  xQueueSend(mqttQueue, (void *)&mqttSendInputMessage, portMAX_DELAY);
+  if (GetIsWiFiConnected() == true) {
+    xQueueSend(mqttQueue, (void *)&mqttSendInputMessage, portMAX_DELAY);
+  }
 }
 
 
@@ -714,8 +698,11 @@ void publishMQTTPeriodicMessage(char topic[], char payload[]) {
   sprintf(mqttSendDataPeriodicBuffer.topic, topic);
   sprintf(mqttSendDataPeriodicBuffer.payload, payload);
   mqttSendDataPeriodicBuffer.ID = IDPUBLISHMQTT;
-  xQueueSend(mqttQueue, (void *)&mqttSendDataPeriodicBuffer, portMAX_DELAY);
+  if (GetIsWiFiConnected() == true) {
+    xQueueSend(mqttQueue, (void *)&mqttSendDataPeriodicBuffer, portMAX_DELAY);
+  }
 }
+
 
 void publishMQTTMessage(char topic[], char payload[]) {
   memset(mqttSendDataBuffer.topic, 0, 100);
@@ -723,7 +710,9 @@ void publishMQTTMessage(char topic[], char payload[]) {
   sprintf(mqttSendDataBuffer.topic, topic);
   sprintf(mqttSendDataBuffer.payload, payload);
   mqttSendDataBuffer.ID = IDPUBLISHMQTT;
-  xQueueSend(mqttQueue, (void *)&mqttSendDataBuffer, portMAX_DELAY);
+  if (GetIsWiFiConnected() == true) {
+    xQueueSend(mqttQueue, (void *)&mqttSendDataBuffer, portMAX_DELAY);
+  }
 }
 
 

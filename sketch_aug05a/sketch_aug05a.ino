@@ -4,22 +4,16 @@
 #include "oled.hpp"
 #include "outputs.hpp"
 #include "inputs.hpp"
-#include "timers.hpp"
 #include "buttons.hpp"
 #include "wifi.hpp"
-#include "MQTT_Task.h"
-#include "watchdog.hpp"
 #include "defs.hpp"
-#include "sdcard.hpp"
 #include "memory.hpp"
 #include "main.h"
-
 
 _Wifi Wifi;
 _Output Output;
 _Input Input;
-_Timer Timer;
-_Nvs Nvs;
+_Memory Memory;
 Oled Oled;
 Buttons buttons;
 
@@ -52,12 +46,10 @@ const char *mqtt_username = "remote2";
 const char *mqtt_password = "password2";
 const char *mqtt_client = "ESP32A01";
 
-
 /*
-*   Callback Struct
+    Callback Struct
 */
 struct callbackStruct callback_data;
-
 
 t_struct Time_t;
 // MQTT Queue
@@ -68,7 +60,6 @@ QueueHandle_t serialWriteQueue;
 QueueHandle_t oledQueue;
 // output Queue
 QueueHandle_t outputQueue;
-
 
 // Timers Handler
 TimerHandle_t timerTwoOneShotHandler = NULL;
@@ -90,7 +81,6 @@ void OLED_DisplayTask(void *pvParam);
 void CallbackTask(void *pvParam);
 void InputTask(void *pvParam);
 
-
 Struct_Output outputDataCallback;
 
 // Task Handlers
@@ -103,7 +93,7 @@ void setup() {
   Wire.begin(SDA_PIN, SCL_PIN);  // this should be after Sensors.begin()
 
   // Initializing the peripherals
-  Nvs.begin();
+  Memory.begin();
   // Starting OLED Display
   Oled.begin();
   // Starting outputs
@@ -120,6 +110,8 @@ void setup() {
   WiFi.begin(ssid, password);
   Serial.println("Connecting to WiFi..");
   ////    writeQueue("Connecting to WiFi ..");
+  sprintf(oledMessage.body, "Connecting WiFi");
+  xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
 
   while (WiFi.status() != WL_CONNECTED) {
     Serial.print(".");
@@ -134,17 +126,19 @@ void setup() {
 
 
   /*
- * Creation of Queues
- */
+    Creation of Queues
+  */
   serialWriteQueue = xQueueCreate(100, sizeof(gUartMessage));
   oledQueue = xQueueCreate(10, sizeof(gUartMessage));
   mqttQueue = xQueueCreate(200, sizeof(Struct_MQTT));
   outputQueue = xQueueCreate(100, sizeof(Struct_Output));
 
   /*
-* Creation of Timers
-*/
+    Creation of Timers
+  */
   timerTwoOneShotHandler = xTimerCreate("Timer two", pdMS_TO_TICKS(3000), 0, (void *)0, timerTwoCallback);
+
+
   // Initialization Task
   xTaskCreatePinnedToCore(InitializationTask, "Initialization Task", 5120, NULL, 5, &Initialization_Task_Handler, 0);
   // MQTT Task
@@ -295,13 +289,13 @@ void CallbackTask(void *pvParam) {
 
       // If topic is a set
       if (strcmp(payloadFunc, "set") == 0) {
-        Nvs.set(payloadName, payloadData);
-        char *reply = Nvs.get(payloadName);
+        Memory.set(payloadName, payloadData);
+        char *reply = Memory.get(payloadName);
         //publishMQTTMessage("reply", reply);
       }
       // If topic is a get
       if (strcmp(payloadFunc, "get") == 0) {
-        char *reply = Nvs.get(payloadName);
+        char *reply = Memory.get(payloadName);
         publishMQTTMessage("reply", reply);
       }
 
@@ -333,11 +327,11 @@ void CallbackTask(void *pvParam) {
         }
 
         if (strcmp(payloadName, "save") == 0) {
-          Nvs.save();
+          Memory.save();
         }
 
         if (strcmp(payloadName, "erase") == 0) {
-          Nvs.erase();
+          Memory.erase();
         }
       }
     }
@@ -475,9 +469,9 @@ void InputTask(void *pvParam) {
     lastButtonValue = buttonValue;  // Update
 
 
-    if(outputButton == SELECT)
+    if (outputButton == SELECT)
     {
-        PublishMQTTInputMessage("button", "SELECT");      
+      PublishMQTTInputMessage("button", "SELECT");
     }
 
 
@@ -619,18 +613,6 @@ void callback(char *topic, byte *payload, unsigned int length) {
   callback_data.dataArrives = true;
 }
 
-
-
-//
-//void publishSystem () {
-//  if (Timer.state("timerOne") == false) {
-//    publishMQTT("wifi", Wifi.getRssiAsQuality());
-//    publishMQTT("uptime", Time.getUptime());
-//    Timer.start("timerOne");                              // Retrigger for next time
-//  }
-//}
-
-
 void subscribeMQTT(char *topic) {
   char dataArray[30];
   snprintf(dataArray, sizeof dataArray, "%s/%s", mqtt_ID, topic);
@@ -679,10 +661,8 @@ void reconnect() {
 }
 
 void PublishMQTTInputMessage(char topic[], char payload[]) {
-
   memset(mqttSendInputMessage.topic, 0, 100);
   memset(mqttSendInputMessage.payload, 0, 100);
-
   sprintf(mqttSendInputMessage.topic, topic);
   sprintf(mqttSendInputMessage.payload, payload);
   mqttSendInputMessage.ID = IDPUBLISHMQTT;
@@ -692,10 +672,8 @@ void PublishMQTTInputMessage(char topic[], char payload[]) {
 
 
 void publishMQTTPeriodicMessage(char topic[], char payload[]) {
-
   memset(mqttSendDataPeriodicBuffer.topic, 0, 100);
   memset(mqttSendDataPeriodicBuffer.payload, 0, 100);
-
   sprintf(mqttSendDataPeriodicBuffer.topic, topic);
   sprintf(mqttSendDataPeriodicBuffer.payload, payload);
   mqttSendDataPeriodicBuffer.ID = IDPUBLISHMQTT;
@@ -703,7 +681,6 @@ void publishMQTTPeriodicMessage(char topic[], char payload[]) {
 }
 
 void publishMQTTMessage(char topic[], char payload[]) {
-
   memset(mqttSendDataBuffer.topic, 0, 100);
   memset(mqttSendDataBuffer.payload, 0, 100);
   sprintf(mqttSendDataBuffer.topic, topic);
@@ -724,7 +701,7 @@ bool GetIsWiFiConnected() {
 void SetIsWiFiConnected(bool value) {
   isWiFiConnected = value;
 }
- 
+
 bool GetPublishInputMessageEnable() {
   return isPublishInputMessageEnable;
 }

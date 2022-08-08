@@ -50,7 +50,7 @@ class _Wifi {
     }
 
     void resetAP() {
-      // wifiManager.resetSettings();
+       wifiManager.resetSettings();
     }
 
   public:

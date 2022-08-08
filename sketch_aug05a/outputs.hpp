@@ -11,17 +11,17 @@ struct outputData {
 }
 
 // name, pin, state, start time
-#define NUM_OUTPUTS 4
+#define NUM_OUTPUTS 8
 
 outputData[NUM_OUTPUTS] = {
-  "relayZero", 2, false, false, 0,              // AE01 Pin 14
-  "relayOne", 4, false, false, 0,              // AE01 Pin 12
-  "relayTwo", 12, false, false, 0,              // AE01 Pin 13
-  "relayThree", 13, false, false, 0,              // AE01 Pin 15
-  //  "relayFour", 2, false, false, 0,
-  //  "relayFive", 33, false, false, 0,
-  //  "transZero", 27, false, false, 0,
-  //  "transOne", 26, false, false, 0,
+  "relayZero", 14, false, false, 0,              // AE01 Pin 14, AE01 Pin 2
+  "relayOne", 12, false, false, 0,              // AE01 Pin 12, AE01 Pin 4
+  "relayTwo", 13, false, false, 0,              // AE01 Pin 13, AE01 Pin 12
+  "relayThree", 15, false, false, 0,              // AE01 Pin 15, AE01 Pin 13
+  "relayFour", 2, false, false, 0,
+  "relayFive", 33, false, false, 0,
+  "transZero", 27, false, false, 0,
+  "transOne", 26, false, false, 0
 };
 
 using namespace std;
@@ -39,9 +39,6 @@ class _Output {
     }
 
     void process (char* payloadAsChar, char* payloadData) {
-      //  // Convert payload data to int when there is something to convert
-      payloadData[sizeof(payloadData)] = '\0';                                          // Make payload a string by NULL terminating it.
-     // int atoi(const char *nptr);
       int payloadDataAsInt = atoi(payloadData);
       if (payloadDataAsInt == 1) {
         start(payloadAsChar);
@@ -61,8 +58,8 @@ class _Output {
           if (outputData[i].outputState == false) {
             outputData[i].outputState = true;
             outputData[i].outputStartTime = timeNow;
-            //   Serial.print(messageName);
-            //   Serial.println(" started");
+            Serial.print(messageName);
+            Serial.println(" started");
             return;
           }
         }

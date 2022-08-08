@@ -571,7 +571,7 @@ void InputTask(void *pvParam) {
         lastTachoTime = timeNow;  // Update timer
       }
       // Only publish input message if switched on
-      if (GetPublishInputMessageEnable()) {
+      if (GetPublishInputMessageEnable() && GetIsWiFiConnected()) {
         publishMQTTMessage("input", inputMessage);
         Serial.println(inputMessage);
       }
@@ -579,14 +579,14 @@ void InputTask(void *pvParam) {
 
 
 
-    if ((isTimerTwoExpired == false) && (isTimerStartRequested == false)) {
+    if ((isTimerTwoExpired == false) && (isTimerStartRequested == false) && GetIsWiFiConnected()) {
       // Start the timer
       xTimerStart(timerTwoOneShotHandler, 1);
       PublishMQTTInputMessage("input", "inZero/0");
       isTimerStartRequested = true;
     }
 
-    if (isTimerTwoExpired == true) {
+    if (isTimerTwoExpired == true  && GetIsWiFiConnected()) {
       PublishMQTTInputMessage("input", "inZero/1");
       isTimerTwoExpired = false;
       isTimerStartRequested = false;

@@ -696,7 +696,7 @@ void SendMessageToOutputTask(char topic[] , char payload[], enum enumOutTask x)
     outputDataCallback.ID = x;
    xQueueSend(outputQueue, (void *)&outputDataCallback, portMAX_DELAY);
 }
-}
+
 void PublishMQTTInputMessage(char topic[], char payload[]) {
   memset(mqttSendInputMessage.topic, 0, 100);
   memset(mqttSendInputMessage.payload, 0, 100);

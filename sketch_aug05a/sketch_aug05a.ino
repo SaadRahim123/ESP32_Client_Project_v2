@@ -85,11 +85,16 @@ void InternetTask(void *pvParam);
 
 
 
-Struct_Output outputDataCallback;
+Struct_Output outputDataCallback , outputStructDataInitialization;
 
 // Task Handlers
 TaskHandle_t Initialization_Task_Handler, Input_Task_Handler, Output_Task_Handler, Display_Task_Handler;
 TaskHandle_t MQTT_Task_Handler, Callback_Task_Handler, Internet_Task_Handler;
+
+// MQTT Structs
+Struct_MQTT mqttSendDataBuffer, mqttSendDataPeriodicBuffer, mqttSendInputMessage;
+
+
 
 void setup() {
   // put your setup code here, to run once:
@@ -180,11 +185,10 @@ void getUptime() {
   // Serial.println(Time_t.timeStr);  // Uncomment to serial print
 }
 
-Struct_MQTT mqttSendDataBuffer, mqttSendDataPeriodicBuffer, mqttSendInputMessage;
 
 void InitializationTask(void *pvParam) {
   //  Struct_MQTT mqttSendDataBuffer;
-  Struct_Output outputStructData;
+  Struct_Output outputStructData , outputStructDataInitialization;
   unsigned long periodicTimer = 0;
   unsigned long periodicTimerCheck;
   unsigned long periodicTimerOutput = 0;
@@ -210,8 +214,7 @@ void InitializationTask(void *pvParam) {
       // updating the outputs
       if (periodicTimerCheck - periodicTimerOutput > FIVE_HUN_MILL) {
         periodicTimerOutput = periodicTimerCheck;
-        outputStructData.ID = UPDATE_OUT;
-        xQueueSend(outputQueue, (void *)&outputStructData, portMAX_DELAY);
+        SendMessageToOutputTaskInit( UPDATE_OUT);   
       }
 
 
@@ -285,8 +288,6 @@ void MQTT_Task(void *pvParam) {
 }
 
 void CallbackTask(void *pvParam) {
-
-
   while (1) {
 
     if ((callback_data.dataArrives)) {
@@ -323,10 +324,7 @@ void CallbackTask(void *pvParam) {
       }
 
       if (strcmp(payloadFunc, "output") == 0) {
-        outputDataCallback.ID = PROCESS_OUT;
-        sprintf(outputDataCallback.topic, callback_data.payload);
-        sprintf(outputDataCallback.payload, payloadData);
-        xQueueSend(outputQueue, (void *)&outputDataCallback, portMAX_DELAY);
+        SendMessageToOutputTask(callback_data.payload, payloadData, PROCESS_OUT);
         Serial.println("Callback Data output ");
       }
 
@@ -387,8 +385,7 @@ void OutputTask(void *pvParam) {
 
         case UPDATE_OUT:
           timeNow = millis();
-          // check if output is on before checking if its a 0
-          //Serial.println("Updating the outputs");
+
           for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
 
             if (outputData[i].outputState == true) {
@@ -682,6 +679,24 @@ void reconnect() {
   }
 }
 
+void SendMessageToOutputTaskInit(enum enumOutTask y)
+{
+  
+  outputStructDataInitialization.ID = y;
+  xQueueSend(outputQueue, (void *)&outputStructDataInitialization, portMAX_DELAY);
+}
+
+
+void SendMessageToOutputTask(char topic[] , char payload[], enum enumOutTask x)
+{
+    memset(outputDataCallback.topic, 0, 100);
+    memset(outputDataCallback.payload, 0, 100);
+    sprintf(outputDataCallback.topic, topic);
+    sprintf(outputDataCallback.payload, payload);
+    outputDataCallback.ID = x;
+   xQueueSend(outputQueue, (void *)&outputDataCallback, portMAX_DELAY);
+}
+}
 void PublishMQTTInputMessage(char topic[], char payload[]) {
   memset(mqttSendInputMessage.topic, 0, 100);
   memset(mqttSendInputMessage.payload, 0, 100);

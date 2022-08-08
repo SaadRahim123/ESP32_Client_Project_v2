@@ -15,7 +15,7 @@ class _Wifi {
     bool connect() {
 
       //WiFi.mode(WIFI_AP); // explicitly set mode, esp defaults to STA+AP
-     wifiManager.resetSettings();
+     //wifiManager.resetSettings();
       SetWiFiBlockingState(false);
       wifiManager.setConfigPortalBlocking(isWiFiBlockingState);
       wifiManager.setConfigPortalTimeout(180);

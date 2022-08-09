@@ -76,7 +76,7 @@ void InputTask(void *pvParam);
 
 
 
-
+gUartMessage oledMessage;
 Struct_Output outputDataCallback, outputStructDataInitialization;
 
 // Task Handlers
@@ -85,7 +85,6 @@ TaskHandle_t MQTT_Task_Handler, Callback_Task_Handler;
 
 // MQTT Structs
 Struct_MQTT mqttSendDataBuffer, mqttSendDataPeriodicBuffer, mqttSendInputMessage;
-
 
 
 void setup() {
@@ -178,19 +177,17 @@ void InitializationTask(void *pvParam) {
   unsigned long periodicTimer = 0;
   unsigned long periodicTimerCheck;
   unsigned long periodicTimerOutput = 0;
-  gUartMessage oledMessage;
+  bool oledMessageAccessPointStartedSent = false;
+  bool oledMessageWifiConnected = false;
   uint8_t index;
   char rpmChr[30];
   while (1) {
     if (GetIsWiFiConnected()) {
       if (!client.connected()) {
-        sprintf(oledMessage.body, "Attempting Re-connection ");
-        xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
+        SendOLEDMessageFromInit("Attempting Re-Connection");
         reconnect();
-        sprintf(oledMessage.body, "MQTT Connected ");
-        xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
-        sprintf(oledMessage.body, "Subscribing... ");
-        xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
+        SendOLEDMessageFromInit("MQTT Connected");
+        SendOLEDMessageFromInit("Subscribing...");
       }
 
 
@@ -216,10 +213,28 @@ void InitializationTask(void *pvParam) {
       }
     }
     if ((Wifi.GetWiFiBlockingState() == false) && GetIsWiFiConnected() == false) {
+      //    Oled.display("Access Point Started");
+      //  Oled.displayln("192.168.4.1");
+      if(oledMessageAccessPointStartedSent == false)
+      {
+      SendOLEDMessageFromInit(" Access Point Started");
+      SendOLEDMessageFromInit("192.168.4.1");
+      oledMessageAccessPointStartedSent = true;
+      }
       Wifi.process();
     }
     if (WiFi.status() == WL_CONNECTED) {
-      SetIsWiFiConnected(true);
+      if(oledMessageWifiConnected == false)
+      {
+        SendOLEDMessageFromInit("WiFi Connected");
+        SetIsWiFiConnected(true);
+        oledMessageWifiConnected = true;
+      }
+      else
+      {
+          SetIsWiFiConnected(false);   
+          oledMessageWifiConnected = false;     
+      }
     }
     vTaskDelay(pdMS_TO_TICKS(10));
   }
@@ -238,13 +253,13 @@ void MQTT_Task(void *pvParam) {
         //        result = (char *)pvPortMalloc(strlen(dataArray) + 1);
         switch ((mqttData.ID)) {
           case IDPUBLISHMQTT:
-            Serial.print("ID Publish MQTT");
+            //  Serial.print("ID Publish MQTT");
             memset(dataArray, 0, 100);
             snprintf(dataArray, 100, "%s/%s", mqtt_ID, mqttData.topic);
             client.publish(dataArray, mqttData.payload);
-            Serial.print(dataArray);
-            Serial.print("/");
-            Serial.println(mqttData.payload);
+            // Serial.print(dataArray);
+            // Serial.print("/");
+            // Serial.println(mqttData.payload);
             //            vPortFree(result);          // Freeing the memory
             break;
 
@@ -408,7 +423,9 @@ void OLED_DisplayTask(void *pvParam) {
   char tempString[100];
   while (1) {
     if (xQueueReceive(oledQueue, (void *)&receiveMsg, portMAX_DELAY) == pdTRUE) {
-      sprintf(tempString, "Writing oled %s", receiveMsg.body);
+      Serial.print("Here in the OLED Task Received: ");
+      Serial.println(receiveMsg.body);
+      // sprintf(tempString, "Writing oled %s", receiveMsg.body);
       //      writeQueue(tempString);
       Oled.displayln(receiveMsg.body);
     }
@@ -586,7 +603,6 @@ void loop() {
 
 
 
-char *payloadAsChar = "";
 void callback(char *topic, byte *payload, unsigned int length) {
 
   // Clearing the global string buffers
@@ -594,7 +610,6 @@ void callback(char *topic, byte *payload, unsigned int length) {
   memset(callback_data.payload, 0, 500);
   //Conver *byte to char*
   payload[length] = '\0';  //First terminate payload with a NULL
-  payloadAsChar = (char *)payload;
   // Break topic down
   Serial.print("Message arrived [");
   Serial.print(topic);
@@ -713,6 +728,12 @@ void publishMQTTMessage(char topic[], char payload[]) {
   if (GetIsWiFiConnected() == true) {
     xQueueSend(mqttQueue, (void *)&mqttSendDataBuffer, portMAX_DELAY);
   }
+}
+
+
+void SendOLEDMessageFromInit(char body[]) {
+  sprintf(oledMessage.body, body);
+  xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
 }
 
 

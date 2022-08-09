@@ -215,26 +215,23 @@ void InitializationTask(void *pvParam) {
     if ((Wifi.GetWiFiBlockingState() == false) && GetIsWiFiConnected() == false) {
       //    Oled.display("Access Point Started");
       //  Oled.displayln("192.168.4.1");
-      if(oledMessageAccessPointStartedSent == false)
-      {
-      SendOLEDMessageFromInit(" Access Point Started");
-      SendOLEDMessageFromInit("192.168.4.1");
-      oledMessageAccessPointStartedSent = true;
+      if (oledMessageAccessPointStartedSent == false) {
+        SendOLEDMessageFromInit(" Access Point Started");
+        SendOLEDMessageFromInit("192.168.4.1");
+        oledMessageAccessPointStartedSent = true;
       }
       Wifi.process();
     }
     if (WiFi.status() == WL_CONNECTED) {
-      if(oledMessageWifiConnected == false)
-      {
+      if (oledMessageWifiConnected == false) {
         SendOLEDMessageFromInit("WiFi Connected");
         SetIsWiFiConnected(true);
         oledMessageWifiConnected = true;
       }
-      else
-      {
-          SetIsWiFiConnected(false);   
-          oledMessageWifiConnected = false;     
-      }
+
+    } else {
+      SetIsWiFiConnected(false);
+      oledMessageWifiConnected = false;
     }
     vTaskDelay(pdMS_TO_TICKS(10));
   }

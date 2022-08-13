@@ -4,9 +4,7 @@
 #include "oled.hpp"
 #include "outputs.hpp"
 #include "inputs.hpp"
-#include "buttons.hpp"
 #include "wifi.hpp"
-#include "defs.hpp"
 #include "memory.hpp"
 #include "main.h"
 
@@ -15,7 +13,6 @@ _Output Output;
 _Input Input;
 _Memory Memory;
 Oled Oled;
-Buttons buttons;
 
 #define DELAY_500MS pdMS_TO_TICKS(500)
 #define DELAY_10MS pdMS_TO_TICKS(10)
@@ -30,7 +27,7 @@ int value = 0;
 int rpm = 0;
 
 // Timer Variables
-bool isTimerTwoExpired = false;
+bool isTimerTwoExpired = true;
 bool isTimerStartRequested = false;
 // Variables
 bool isMQTTConnectionEstablished = false;
@@ -53,7 +50,6 @@ struct callbackStruct callback_data;
 
 t_struct Time_t;
 
-
 // Timers Handler
 TimerHandle_t timerTwoOneShotHandler = NULL;
 
@@ -61,10 +57,9 @@ TimerHandle_t timerTwoOneShotHandler = NULL;
 void timerTwoCallback(TimerHandle_t timerTwoOneShotHandler) {
   // This is the Callback Function
   // The callback function is used to count the x number of seconds and signals the task if the timer expires
-  Serial.println("Timer Expired");
+  //  Serial.println("Timer Expired");
   isTimerTwoExpired = true;
 }
-
 
 // Task Prototypes
 void InitializationTask(void *pvParam);
@@ -73,8 +68,6 @@ void MQTT_Task(void *pvParam);
 void OLED_DisplayTask(void *pvParam);
 void CallbackTask(void *pvParam);
 void InputTask(void *pvParam);
-
-
 
 gUartMessage oledMessage;
 Struct_Output outputDataCallback, outputStructDataInitialization;
@@ -86,12 +79,10 @@ TaskHandle_t MQTT_Task_Handler, Callback_Task_Handler;
 // MQTT Structs
 Struct_MQTT mqttSendDataBuffer, mqttSendDataPeriodicBuffer, mqttSendInputMessage;
 
-
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
   Wire.begin(SDA_PIN, SCL_PIN);  // this should be after Sensors.begin()
-
   // Initializing the peripherals
   Memory.begin();
   // Starting OLED Display
@@ -100,8 +91,6 @@ void setup() {
   Output.begin();
   // Starting Inputs
   Input.begin();
-  // Button Initialization
-  buttons.begin();
 
 #ifdef DYNAMIC_WIFI
   isWiFiConnected = Wifi.connect();
@@ -109,13 +98,8 @@ void setup() {
   WiFi.mode(WIFI_AP_STA);
   WiFi.begin(ssid, password);
   Serial.println("Connecting to WiFi..");
-  ////    writeQueue("Connecting to WiFi ..");
-  sprintf(oledMessage.body, "Connecting WiFi");
-  xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
-
   while (WiFi.status() != WL_CONNECTED) {
     Serial.print(".");
-    //  //    writeQueue(".");
     delay(1000);
   }
   SetIsWiFiConnected(true);
@@ -123,9 +107,6 @@ void setup() {
   Serial.println("Connected ");
   client.setServer(mqtt_broker, 1883);
   client.setCallback(callback);
-
-
-
 
   /*
     Creation of Queues
@@ -175,6 +156,7 @@ void InitializationTask(void *pvParam) {
   //  Struct_MQTT mqttSendDataBuffer;
   Struct_Output outputStructData, outputStructDataInitialization;
   unsigned long periodicTimer = 0;
+  unsigned long periodicTimerTwo = 0;
   unsigned long periodicTimerCheck;
   unsigned long periodicTimerOutput = 0;
   bool oledMessageAccessPointStartedSent = false;
@@ -182,24 +164,17 @@ void InitializationTask(void *pvParam) {
   uint8_t index;
   char rpmChr[30];
   while (1) {
+    periodicTimerCheck = millis();
     if (GetIsWiFiConnected()) {
-      if (!client.connected()) {
-        SendOLEDMessageFromInit("Attempting Re-Connection");
-        reconnect();
-        SendOLEDMessageFromInit("MQTT Connected");
-        SendOLEDMessageFromInit("Subscribing...");
+    //  Serial.println(isTimerTwoExpired);
+      if (periodicTimerCheck - periodicTimerTwo > PERIODIC_RECONNECT_TIMEOUT) {
+        periodicTimerTwo = periodicTimerCheck;
+        if (!client.connected()) {
+          MQTTreconnect();
+        }
       }
-
 
       client.loop();
-      periodicTimerCheck = millis();
-
-      // updating the outputs
-      if (periodicTimerCheck - periodicTimerOutput > FIVE_HUN_MILL) {
-        periodicTimerOutput = periodicTimerCheck;
-        SendMessageToOutputTaskInit(UPDATE_OUT);
-      }
-
 
       if (periodicTimerCheck - periodicTimer > PERIODIC_MESSAGE_TIMEOUT) {
         periodicTimer = periodicTimerCheck;
@@ -212,24 +187,32 @@ void InitializationTask(void *pvParam) {
         publishMQTTPeriodicMessage("tacho", rpmChr);
       }
     }
+
+    // updating the outputs
+    if (periodicTimerCheck - periodicTimerOutput > TEN_MILL) {
+      periodicTimerOutput = periodicTimerCheck;
+      SendMessageToOutputTaskInit(UPDATE_OUT);
+    }
     if ((Wifi.GetWiFiBlockingState() == false) && GetIsWiFiConnected() == false) {
-      //    Oled.display("Access Point Started");
-      //  Oled.displayln("192.168.4.1");
-      if (oledMessageAccessPointStartedSent == false) {
-        SendOLEDMessageFromInit(" Access Point Started");
-        SendOLEDMessageFromInit("192.168.4.1");
+      if (oledMessageAccessPointStartedSent == false)
+      {
+        SendOLEDMessageFromInit("Access Point Started");
+        SendOLEDMessageFromInit("SSID: ESP32");
+        SendOLEDMessageFromInit("IP: 192.168.4.1");
         oledMessageAccessPointStartedSent = true;
       }
       Wifi.process();
     }
     if (WiFi.status() == WL_CONNECTED) {
-      if (oledMessageWifiConnected == false) {
+      if (oledMessageWifiConnected == false)
+      {
         SendOLEDMessageFromInit("WiFi Connected");
         SetIsWiFiConnected(true);
         oledMessageWifiConnected = true;
       }
-
-    } else {
+    }
+    else
+    {
       SetIsWiFiConnected(false);
       oledMessageWifiConnected = false;
     }
@@ -254,10 +237,6 @@ void MQTT_Task(void *pvParam) {
             memset(dataArray, 0, 100);
             snprintf(dataArray, 100, "%s/%s", mqtt_ID, mqttData.topic);
             client.publish(dataArray, mqttData.payload);
-            // Serial.print(dataArray);
-            // Serial.print("/");
-            // Serial.println(mqttData.payload);
-            //            vPortFree(result);          // Freeing the memory
             break;
 
           case IDSUBSCRIBEMQTT:
@@ -287,11 +266,7 @@ void CallbackTask(void *pvParam) {
   while (1) {
 
     if ((callback_data.dataArrives)) {
-
-      Serial.println("Here in the CallbackTask");
       callback_data.dataArrives = false;
-
-
       char *payloadId = strtok(callback_data.topic, "/");
       char *payloadFunc = strtok(NULL, "/");
       // Break payload down
@@ -311,7 +286,7 @@ void CallbackTask(void *pvParam) {
       if (strcmp(payloadFunc, "set") == 0) {
         Memory.set(payloadName, payloadData);
         char *reply = Memory.get(payloadName);
-        //publishMQTTMessage("reply", reply);
+        publishMQTTMessage("reply", reply);
       }
       // If topic is a get
       if (strcmp(payloadFunc, "get") == 0) {
@@ -363,48 +338,22 @@ void OutputTask(void *pvParam) {
   unsigned long timeNow;
   while (1) {
     if (xQueueReceive(outputQueue, (void *)&outputStructData, portMAX_DELAY) == pdTRUE) {
-
-      //Serial.println("Output Task Request");
+      // Serial.println("Output Task Request");
       switch (outputStructData.ID) {
         case PROCESS_OUT:
-
           Output.process(outputStructData.topic, outputStructData.payload);
           break;
 
         case START_OUT:
-          Output.start(outputStructData.topic);
+          Output.start(outputStructData.payload);
           break;
 
         case STOP_OUT:
-          Output.stop(outputStructData.topic);
+          Output.stop(outputStructData.payload);
           break;
 
         case UPDATE_OUT:
-          timeNow = millis();
-
-          for (uint8_t i = 0; i < NUM_OUTPUTS; i++) {
-
-            if (outputData[i].outputState == true) {
-              // convert char* to string
-              string nameStr(outputData[i].outputName);
-              // If output on time setting is 0 then ignore the update
-              if (settings[nameStr] != 0) {
-                if (timeNow - outputData[i].outputStartTime >= settings[nameStr]) {
-                  outputData[i].outputState = false;
-                }
-              }
-            }
-            if (outputData[i].outputState != outputData[i].prevState) {
-              // Update pins only if state has changed
-              digitalWrite(outputData[i].outputPin, outputData[i].outputState);
-              Serial.print("Output: ");
-              Serial.print(outputData[i].outputName);
-              Serial.print(" State: ");
-              Serial.println(outputData[i].outputState);
-              // Update previous state
-              outputData[i].prevState = outputData[i].outputState;
-            }
-          }
+          Output.update();
           break;
       }
     }
@@ -420,13 +369,12 @@ void OLED_DisplayTask(void *pvParam) {
   char tempString[100];
   while (1) {
     if (xQueueReceive(oledQueue, (void *)&receiveMsg, portMAX_DELAY) == pdTRUE) {
-      Serial.print("Here in the OLED Task Received: ");
+      Serial.print("Oled print: ");
       Serial.println(receiveMsg.body);
       // sprintf(tempString, "Writing oled %s", receiveMsg.body);
       //      writeQueue(tempString);
       Oled.displayln(receiveMsg.body);
     }
-
     vTaskDelay(DELAY_10MS);
   }
 }
@@ -449,10 +397,8 @@ void InputTask(void *pvParam) {
 
     timeNow = millis();
     buttonValue = analogRead(BUTTONS);
-
-    // Serial.print("AnalogRead: ");
-    // Serial.println(buttonValue);              // Uncomment to print button value
-
+    //    Serial.print("AnalogRead: ");
+    //    Serial.println(buttonValue);              // Uncomment to print button value
     if (buttonValue > lastButtonValue + 100 || buttonValue < lastButtonValue - 100) {  // if the button state has changed
       lastDebounceTime = timeNow;                                                      // Start the timer
     }
@@ -460,37 +406,34 @@ void InputTask(void *pvParam) {
     if (buttonValue == 0) {
       pushed = false;  // Reset the button press
     }
-
     if ((timeNow - lastDebounceTime) > settings["debounce"]) {
       if (pushed == false && buttonValue > 0) {
-        // Then handle button logic
-        if (buttonValue > 3000 && buttonValue < 3300) {  // AE-01 Settings
+        if (buttonValue > 3200 && buttonValue < 3600) {         // AE-01 Settings
           Serial.println("Button SELECT pressed");
-          //  Oled.displayln("Button SELECT pressed");
           pushed = true;
           outputButton = SELECT;
-        } else if (buttonValue > 2000 && buttonValue < 2300) {  // AE-01 Settings
+        } else if (buttonValue > 2200 && buttonValue < 2500) {  // AE-01 Settings
           Serial.println("Button DOWN pressed");
-          // Oled.displayln("Button DOWN pressed");
           pushed = true;
           outputButton = DOWN;
-        } else if (buttonValue > 1200 && buttonValue < 1600) {  // AE-01 Settings
+        } else if (buttonValue > 1500 && buttonValue < 1700) {  // AE-01 Settings
           Serial.println("Button UP pressed");
-          // Oled.displayln("Button UP pressed");
           pushed = true;
           outputButton = UP;
         }
-        // Serial.println("Button NONE");
+      }
+      else {
         outputButton = NONE;
+        //  Serial.println("Button NONE");
       }
     }
     lastButtonValue = buttonValue;  // Update
 
-
     if (outputButton == SELECT) {
+      Serial.println("Button SELECT pressed");
       PublishMQTTInputMessage("button", "SELECT");
+      SendMessageToOutputTask("output", "transZero", START_OUT);
     }
-
 
     if (GetPublishInputMessageEnable()) {  // Only publish if switched on
       Input.update(inputMessage);
@@ -505,57 +448,31 @@ void InputTask(void *pvParam) {
     if (inputMessage != "none") {
 
       if (strcmp(inputMessage, "inFive/1") == 0) {
-        Serial.println("Button Pushed");
         if (buttonCounter > 3) {
           buttonCounter = 1;
         }
         if (buttonCounter == 1) {
-          Serial.println("relayTwo triggered");
-          outputQueueData.ID = START_OUT;
-          sprintf(outputQueueData.topic, "replayTwo");
-          xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
-          //Output.start("relayTwo");
+          SendMessageToOutputTask("output", "relayTwo", START_OUT);
         }
         if (buttonCounter == 2) {
-          outputQueueData.ID = START_OUT;
-          sprintf(outputQueueData.topic, "relayThree");
-          xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
-          //Output.start("relayThree");
-          Serial.println("relayThree triggered");
+          SendMessageToOutputTask("output", "relayThree", START_OUT);
         }
         if (buttonCounter == 3) {
-          outputQueueData.ID = START_OUT;
-          sprintf(outputQueueData.topic, "relayFour");
-          xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
-          //Output.start("relayFour");
-          Serial.println("relayFour triggered");
+          SendMessageToOutputTask("output", "relayFour", START_OUT);
         }
         buttonCounter++;
       }
 
       if (strcmp(inputMessage, "inSix/1") == 0) {
-        outputQueueData.ID = START_OUT;
-        sprintf(outputQueueData.topic, "transOne");
-        xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
-        Serial.println("transOne triggered");
-        // Output.start("transOne");
+        SendMessageToOutputTask("output", "transOne", START_OUT);
       }
 
       if (strcmp(inputMessage, "inOne/1") == 0) {
-        outputQueueData.ID = START_OUT;
-        sprintf(outputQueueData.topic, "relayOne");
-        xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
-        Serial.println("relayOne triggered");
-        //Output.start("relayOne");
+        SendMessageToOutputTask("output", "relayOne", START_OUT);
       }
 
       if (strcmp(inputMessage, "inSeven/1") == 0) {
-        outputQueueData.ID = START_OUT;
-        sprintf(outputQueueData.topic, "relayZero");
-        xQueueSend(outputQueue, (void *)&outputQueueData, portMAX_DELAY);
-        Serial.println("relayZero triggered");
-        //      Timer.start("timerOne");
-        // Output.start("relayZero");
+        SendMessageToOutputTask("output", "relayZero", START_OUT);
       }
 
       // Calculate RPM
@@ -574,30 +491,29 @@ void InputTask(void *pvParam) {
         Serial.println(inputMessage);
       }
     }
-
-
-
-    if ((isTimerTwoExpired == false) && (isTimerStartRequested == false) && GetIsWiFiConnected()) {
-      // Start the timer
-      xTimerStart(timerTwoOneShotHandler, 1);
-      PublishMQTTInputMessage("input", "inZero/0");
-      isTimerStartRequested = true;
-    }
-
-    if (isTimerTwoExpired == true && GetIsWiFiConnected()) {
-      PublishMQTTInputMessage("input", "inZero/1");
-      isTimerTwoExpired = false;
-      isTimerStartRequested = false;
-    }
-
-
+    //
+    //    if ((isTimerTwoExpired == false) && (isTimerStartRequested == false)) {
+    //      // Start the timer
+    //      xTimerStart(timerTwoOneShotHandler, 1);
+    //      isTimerStartRequested = true;
+    //      if (GetIsWiFiConnected()) {
+    //        PublishMQTTInputMessage("input", "inZero/0");
+    //      }
+    //    }
+    //
+    //    if (isTimerTwoExpired == true) {
+    //      SendMessageToOutputTask("output", "relayThree", START_OUT);
+    //      isTimerTwoExpired = false;
+    //      isTimerStartRequested = false;
+    //      if (GetIsWiFiConnected()) {
+    //        PublishMQTTInputMessage("input", "inZero/1");
+    //      }
+    //    }
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
 void loop() {
 }
-
-
 
 
 void callback(char *topic, byte *payload, unsigned int length) {
@@ -608,9 +524,8 @@ void callback(char *topic, byte *payload, unsigned int length) {
   //Conver *byte to char*
   payload[length] = '\0';  //First terminate payload with a NULL
   // Break topic down
-  Serial.print("Message arrived [");
+  Serial.print("Message arrived: ");
   Serial.print(topic);
-  Serial.print("] ");
 
   for (int i = 0; i < length; i++) {
     Serial.print((char)payload[i]);
@@ -621,9 +536,9 @@ void callback(char *topic, byte *payload, unsigned int length) {
   memcpy(callback_data.payload, payload, length);
   memcpy(callback_data.topic, topic, strlen(topic));
 
-  Serial.print("  Payload");
+  Serial.print("Payload:");
   Serial.println(callback_data.payload);
-  Serial.print("  topic");
+  Serial.print(" Topic:");
   Serial.println(callback_data.topic);
   callback_data.dataArrives = true;
 }
@@ -638,34 +553,37 @@ void subscribeMQTT(char *topic) {
 }
 
 void reSubscribe() {
+  SendOLEDMessageFromInit("Subscribing...");
+  Serial.println("Subscribing...");
   subscribeMQTT("timer");
   subscribeMQTT("output");
   subscribeMQTT("system");
   subscribeMQTT("set");
   subscribeMQTT("get");
-  //  Serial.println("Connected, subscribing... ");
-  //  Oled.displayln("MQTT Connected ");
-  //  Oled.displayln("Subscribing... ");
 }
 
 int reconnectCounter = 0;
-void reconnect() {
+
+void MQTTreconnect() {
   // Loop until we're reconnected
-  Serial.println("Attempting MQTT connection... ");
-  //  Oled.displayln("Attempting connection ");
+  Serial.println("Attempting MQTT");
+  SendOLEDMessageFromInit("Attempting MQTT");
   String clientId = "MQTTClient-";
   clientId += 90;
   // Attempt to connect
   if (client.connect(clientId.c_str(), mqtt_username, mqtt_password)) {  //(client.connect(clientId.c_str())) {
     reSubscribe();
     reconnectCounter = 0;  // reset counter
-    Serial.println("Connected!! ");
+    Serial.println("MQTT Connected");
+    SendOLEDMessageFromInit("MQTT Connected");
     SetMQTTConnectionStatus(true);
-  } else if (reconnectCounter > 5) {
+  }
+  else if (reconnectCounter > 500) {
     Serial.println("Resetting ESP32");
     delay(500);
-    // ESP.restart();
-  } else {
+    ESP.restart();
+  }
+  else {
     reconnectCounter++;
     Serial.print("Attempt: ");
     Serial.print(reconnectCounter);
@@ -676,7 +594,6 @@ void reconnect() {
 }
 
 void SendMessageToOutputTaskInit(enum enumOutTask y) {
-
   outputStructDataInitialization.ID = y;
   xQueueSend(outputQueue, (void *)&outputStructDataInitialization, portMAX_DELAY);
 }
@@ -702,8 +619,6 @@ void PublishMQTTInputMessage(char topic[], char payload[]) {
   }
 }
 
-
-
 void publishMQTTPeriodicMessage(char topic[], char payload[]) {
   memset(mqttSendDataPeriodicBuffer.topic, 0, 100);
   memset(mqttSendDataPeriodicBuffer.payload, 0, 100);
@@ -727,12 +642,10 @@ void publishMQTTMessage(char topic[], char payload[]) {
   }
 }
 
-
 void SendOLEDMessageFromInit(char body[]) {
   sprintf(oledMessage.body, body);
   xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
 }
-
 
 void SetPublishInputMessageEnable(bool value) {
   isPublishInputMessageEnable = value;

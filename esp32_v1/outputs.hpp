@@ -15,7 +15,7 @@ struct outputData {
 
 outputData[NUM_OUTPUTS] = {
   "relayZero", 14, false, false, 0,              // AE01 Pin 14, AE01 Pin 2
-  "relayOne", 12, false, false, 0,              // AE01 Pin 12, AE01 Pin 4
+  "relayOne", 12, true, false, 0,              // AE01 Pin 12, AE01 Pin 4
   "relayTwo", 13, false, false, 0,              // AE01 Pin 13, AE01 Pin 12
   "relayThree", 15, false, false, 0,              // AE01 Pin 15, AE01 Pin 13
   "relayFour", 2, false, false, 0,
@@ -58,8 +58,8 @@ class _Output {
           if (outputData[i].outputState == false) {
             outputData[i].outputState = true;
             outputData[i].outputStartTime = timeNow;
-            Serial.print(messageName);
-            Serial.println(" started");
+        //    Serial.print(messageName);
+        //    Serial.println(" started");
             return;
           }
         }
@@ -72,8 +72,8 @@ class _Output {
         if (strcmp(messageName, outputData[i].outputName) == 0) {
           if (outputData[i].outputState == true) {
             outputData[i].outputState = false;
-            Serial.print(messageName);
-            Serial.println(" stopped");
+         //   Serial.print(messageName);
+          //  Serial.println(" stopped");
             return;
           }
         }

@@ -10,14 +10,15 @@ class _Memory {
   public:
 
     void begin() {
+
+      //save();     //Uncomment to load defaults
+      
       preferences.begin("settings", false);
-      Serial.println("Opened nvs.begin");
       for (auto &pair : settings) {
         auto name = pair.first;
         // Convert string to const char pointer to use in preferences
         const char* key = name.c_str();
         settings[name] = preferences.getInt(key, 0);
-        Serial.println(key);
       }
       preferences.end();
       Serial.println("Settings updated from memory");

@@ -15,7 +15,7 @@ class _Wifi {
     bool connect() {
 
       //WiFi.mode(WIFI_AP); // explicitly set mode, esp defaults to STA+AP
-    //  wifiManager.resetSettings();
+      //wifiManager.resetSettings();
       SetWiFiBlockingState(false);
       wifiManager.setConfigPortalBlocking(isWiFiBlockingState);
       wifiManager.setConfigPortalTimeout(180);
@@ -32,10 +32,6 @@ class _Wifi {
       }
       else {
         Serial.println("Access Point Started");
-      // SendOLEDMessageFromInit(" Access Point Started");
-      // SendOLEDMessageFromInit("192.168.4.1");
-    //    Oled.display("Access Point Started");
-    //  Oled.displayln("192.168.4.1");
         return false;
       }
     }

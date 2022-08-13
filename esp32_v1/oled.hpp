@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Wire.h>
-#include "defs.hpp"
+#include "main.h"
 #include "SSD1306Ascii.h"
 #include "SSD1306AsciiWire.h"
 

@@ -145,3 +145,24 @@ void SetIsWiFiConnected(bool value);
 
 // This function is used to send OLED Messages from other files
 void SendOLEDMessageFromInit(char body[]);
+
+// This function is used to send MQTT Message from Callback Task
+void publishMQTTMessage(char topic[], char payload[]);
+
+// This function is used to send message to Output Task
+void SendMessageToOutputTask(char topic[], char payload[], enum enumOutTask x);
+
+// This function is used to set input message flag
+void SetPublishInputMessageEnable(bool value);
+
+// This function is used to get Input message flag
+bool GetPublishInputMessageEnable(void);
+
+// This function is used to save settings in memory
+void SaveMemory(void);
+
+// This function is used to erase memory
+void EraseMemory(void);
+
+// This function is used to init Memory
+void MemoryInit();

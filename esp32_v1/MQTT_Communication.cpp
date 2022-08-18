@@ -6,7 +6,10 @@
 #include "freertos/queue.h"
 #include <PubSubClient.h>
 #include "WiFi.h"
+#include "memory.hpp"
 
+
+_Memory Memory;
 
 //------------------------------------------------------------------------------
 //  MAIN Variables for MQTT
@@ -38,8 +41,8 @@ const char *mqtt_client = "ESP32A01";
 //------------------------------------------------------------------------------
 extern QueueHandle_t mqttQueue;
 extern struct callbackStruct callback_data;
-
-
+extern void CallbackTask(void *pvParam);
+extern void MQTT_Task(void *pvParam);
 
 //------------------------------------------------------------------------------
 //  void MQTT_Task(void *pvParam)
@@ -83,6 +86,88 @@ void MQTT_Task(void *pvParam) {
       }
     }
     // Yielding the task in case of Connection not established
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
+}
+
+void MemoryInit()
+{
+  Memory.begin();
+}
+
+//------------------------------------------------------------------------------
+//  void CallbackTask(void *pvParam)
+//
+//  This is CallbackTask main function
+//------------------------------------------------------------------------------
+void CallbackTask(void *pvParam) {
+
+  
+  while (1) {
+
+    if ((callback_data.dataArrives)) {
+      callback_data.dataArrives = false;
+      char *payloadId = strtok(callback_data.topic, "/");
+      char *payloadFunc = strtok(NULL, "/");
+      // Break payload down
+      char *payloadName = strtok(callback_data.payload, "/");
+      char *payloadData = strtok(NULL, "/");
+
+      Serial.print("ID: ");
+      Serial.print(payloadId);
+      Serial.print(" Function: ");
+      Serial.print(payloadFunc);
+      Serial.print(" Name: ");
+      Serial.print(payloadName);
+      Serial.print(" Data: ");
+      Serial.println(payloadData);
+
+      // If topic is a set
+      if (strcmp(payloadFunc, "set") == 0) {
+        Memory.set(payloadName, payloadData);
+        char *reply = Memory.get(payloadName);
+        publishMQTTMessage("reply", reply);
+      }
+      // If topic is a get
+      if (strcmp(payloadFunc, "get") == 0) {
+        char *reply = Memory.get(payloadName);
+        publishMQTTMessage("reply", reply);
+      }
+
+      if (strcmp(payloadFunc, "output") == 0) {
+        SendMessageToOutputTask(callback_data.payload, payloadData, PROCESS_OUT);
+        Serial.println("Callback Data output ");
+      }
+
+      if (strcmp(payloadFunc, "timer") == 0) {
+        // Timer.start(payloadAsChar);
+        return;
+      }
+
+      if (strcmp(payloadFunc, "system") == 0) {
+
+        if (strcmp(payloadName, "publish") == 0) {
+          bool ret = GetPublishInputMessageEnable();
+          SetPublishInputMessageEnable(!ret);
+          Serial.print("Publish input messages: ");
+          Serial.println(ret);
+        }
+
+        if (strcmp(payloadName, "restart") == 0) {
+          Serial.println("Resetting ESP32");
+          ESP.restart();
+          return;
+        }
+
+        if (strcmp(payloadName, "save") == 0) {
+          Memory.save();
+        }
+
+        if (strcmp(payloadName, "erase") == 0) {
+          Memory.erase();
+        }
+      }
+    }
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 }

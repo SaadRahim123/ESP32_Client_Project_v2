@@ -5,7 +5,7 @@
 #include "outputs.hpp"
 #include "inputs.hpp"
 #include "wifi.hpp"
-#include "memory.hpp"
+// #include "memory.hpp"
 #include "main.h"
 #include "mqttCommunication.h"
 
@@ -13,7 +13,7 @@
 _Wifi Wifi;
 _Output Output;
 _Input Input;
-_Memory Memory;
+// _Memory Memory;
 
 
 
@@ -62,7 +62,7 @@ TimerHandle_t timerTwoOneShotHandler = NULL;
 //------------------------------------------------------------------------------
 void InitializationTask(void *pvParam);
 void OutputTask(void *pvParam);
-extern void MQTT_Task(void *pvParam);
+void MQTT_Task(void *pvParam);
 void OLED_DisplayTask(void *pvParam);
 void CallbackTask(void *pvParam);
 void InputTask(void *pvParam);
@@ -98,7 +98,7 @@ void setup() {
   Serial.begin(115200);
   Wire.begin(SDA_PIN, SCL_PIN);  // this should be after Sensors.begin()
   // Initializing the peripherals
-  Memory.begin();
+  MemoryInit();
   // Starting OLED Display
   BeginOledDisplay();
   // Starting outputs
@@ -236,74 +236,7 @@ void InitializationTask(void *pvParam) {
 }
 
 
-void CallbackTask(void *pvParam) {
-  while (1) {
 
-    if ((callback_data.dataArrives)) {
-      callback_data.dataArrives = false;
-      char *payloadId = strtok(callback_data.topic, "/");
-      char *payloadFunc = strtok(NULL, "/");
-      // Break payload down
-      char *payloadName = strtok(callback_data.payload, "/");
-      char *payloadData = strtok(NULL, "/");
-
-      Serial.print("ID: ");
-      Serial.print(payloadId);
-      Serial.print(" Function: ");
-      Serial.print(payloadFunc);
-      Serial.print(" Name: ");
-      Serial.print(payloadName);
-      Serial.print(" Data: ");
-      Serial.println(payloadData);
-
-      // If topic is a set
-      if (strcmp(payloadFunc, "set") == 0) {
-        Memory.set(payloadName, payloadData);
-        char *reply = Memory.get(payloadName);
-        publishMQTTMessage("reply", reply);
-      }
-      // If topic is a get
-      if (strcmp(payloadFunc, "get") == 0) {
-        char *reply = Memory.get(payloadName);
-        publishMQTTMessage("reply", reply);
-      }
-
-      if (strcmp(payloadFunc, "output") == 0) {
-        SendMessageToOutputTask(callback_data.payload, payloadData, PROCESS_OUT);
-        Serial.println("Callback Data output ");
-      }
-
-      if (strcmp(payloadFunc, "timer") == 0) {
-        // Timer.start(payloadAsChar);
-        return;
-      }
-
-      if (strcmp(payloadFunc, "system") == 0) {
-
-        if (strcmp(payloadName, "publish") == 0) {
-          SetPublishInputMessageEnable(!isPublishInputMessageEnable);
-          Serial.print("Publish input messages: ");
-          Serial.println(isPublishInputMessageEnable);
-        }
-
-        if (strcmp(payloadName, "restart") == 0) {
-          Serial.println("Resetting ESP32");
-          ESP.restart();
-          return;
-        }
-
-        if (strcmp(payloadName, "save") == 0) {
-          Memory.save();
-        }
-
-        if (strcmp(payloadName, "erase") == 0) {
-          Memory.erase();
-        }
-      }
-    }
-    vTaskDelay(pdMS_TO_TICKS(10));
-  }
-}
 
 void OutputTask(void *pvParam) {
 
@@ -546,8 +479,13 @@ void SendOLEDMessageFromInit(char body[]) {
   xQueueSend(oledQueue, (void *)&oledMessage, portMAX_DELAY);
 }
 
-void SetPublishInputMessageEnable(bool value) {
+void  SetPublishInputMessageEnable(bool value) {
   isPublishInputMessageEnable = value;
+}
+
+bool GetPublishInputMessageEnable(void)
+{
+  return isPublishInputMessageEnable;
 }
 
 bool GetIsWiFiConnected() {
@@ -558,9 +496,7 @@ void SetIsWiFiConnected(bool value) {
   isWiFiConnected = value;
 }
 
-bool GetPublishInputMessageEnable() {
-  return isPublishInputMessageEnable;
-}
+
 void SetMQTTConnectionStatus(bool value) {
   isMQTTConnectionEstablished = value;
 }
@@ -568,8 +504,6 @@ void SetMQTTConnectionStatus(bool value) {
 bool GetMQTTConnectionStatus(void) {
   return isMQTTConnectionEstablished;
 }
-
-
 
 // Timer Callbacks
 void timerTwoCallback(TimerHandle_t timerTwoOneShotHandler) {

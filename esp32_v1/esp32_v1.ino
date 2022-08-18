@@ -1,31 +1,39 @@
 #include <PubSubClient.h>
 #include "WiFi.h"
 #include "settings.hpp"
-#include "oled.hpp"
+
 #include "outputs.hpp"
 #include "inputs.hpp"
 #include "wifi.hpp"
 #include "memory.hpp"
 #include "main.h"
+#include "mqttCommunication.h"
+
 
 _Wifi Wifi;
 _Output Output;
 _Input Input;
 _Memory Memory;
-Oled Oled;
 
+
+
+//------------------------------------------------------------------------------
+// Preprocessors
+//------------------------------------------------------------------------------
 #define DELAY_500MS pdMS_TO_TICKS(500)
-#define DELAY_10MS pdMS_TO_TICKS(10)
+// #define DELAY_10MS pdMS_TO_TICKS(10)
 
-WiFiClient espClient;
-PubSubClient client(espClient);
+// WiFiClient espClient;
+// PubSubClient client(espClient);
+
+//------------------------------------------------------------------------------
+// Local Variables
+//------------------------------------------------------------------------------
 unsigned long lastMsg = 0;
 #define MSG_BUFFER_SIZE (50)
 char msg[MSG_BUFFER_SIZE];
 int value = 0;
-
 int rpm = 0;
-
 // Timer Variables
 bool isTimerTwoExpired = true;
 bool isTimerStartRequested = false;
@@ -34,51 +42,57 @@ bool isMQTTConnectionEstablished = false;
 bool isPublishInputMessageEnable = false;
 bool isWiFiConnected = false;
 
-// MQTT Broker
-const char *mqtt_broker = "broker.emqx.io";
-const int mqtt_port = 1883;
-const char *mqtt_ID = "esp32a01";
-// MQTT Credentials
-const char *mqtt_username = "remote2";
-const char *mqtt_password = "password2";
-const char *mqtt_client = "ESP32A01";
 
-/*
-    Callback Struct
-*/
+//------------------------------------------------------------------------------
+// Structs
+//------------------------------------------------------------------------------
 struct callbackStruct callback_data;
-
 t_struct Time_t;
+gUartMessage oledMessage;
+Struct_Output outputDataCallback, outputStructDataInitialization;
+Struct_MQTT mqttSendDataBuffer, mqttSendDataPeriodicBuffer, mqttSendInputMessage;
 
-// Timers Handler
+//------------------------------------------------------------------------------
+// Timer Handlers
+//------------------------------------------------------------------------------
 TimerHandle_t timerTwoOneShotHandler = NULL;
 
-// Timer Callbacks
-void timerTwoCallback(TimerHandle_t timerTwoOneShotHandler) {
-  // This is the Callback Function
-  // The callback function is used to count the x number of seconds and signals the task if the timer expires
-  //  Serial.println("Timer Expired");
-  isTimerTwoExpired = true;
-}
-
+//------------------------------------------------------------------------------
 // Task Prototypes
+//------------------------------------------------------------------------------
 void InitializationTask(void *pvParam);
 void OutputTask(void *pvParam);
-void MQTT_Task(void *pvParam);
+extern void MQTT_Task(void *pvParam);
 void OLED_DisplayTask(void *pvParam);
 void CallbackTask(void *pvParam);
 void InputTask(void *pvParam);
 
-gUartMessage oledMessage;
-Struct_Output outputDataCallback, outputStructDataInitialization;
 
+
+
+//------------------------------------------------------------------------------
 // Task Handlers
+//------------------------------------------------------------------------------
 TaskHandle_t Initialization_Task_Handler, Input_Task_Handler, Output_Task_Handler, Display_Task_Handler;
 TaskHandle_t MQTT_Task_Handler, Callback_Task_Handler;
 
-// MQTT Structs
-Struct_MQTT mqttSendDataBuffer, mqttSendDataPeriodicBuffer, mqttSendInputMessage;
+//------------------------------------------------------------------------------
+// Queues Handlers
+//------------------------------------------------------------------------------
+// MQTT Queue
+QueueHandle_t mqttQueue;
+// Handles for Queues
+QueueHandle_t serialWriteQueue;
+// oled Queue
+QueueHandle_t oledQueue;
+// output Queue
+QueueHandle_t outputQueue;
 
+
+
+//------------------------------------------------------------------------------
+// This is the Setup Task for Arduino
+//------------------------------------------------------------------------------
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
@@ -86,7 +100,7 @@ void setup() {
   // Initializing the peripherals
   Memory.begin();
   // Starting OLED Display
-  Oled.begin();
+  BeginOledDisplay();
   // Starting outputs
   Output.begin();
   // Starting Inputs
@@ -105,8 +119,8 @@ void setup() {
   SetIsWiFiConnected(true);
 #endif
   Serial.println("Connected ");
-  client.setServer(mqtt_broker, 1883);
-  client.setCallback(callback);
+  InitMQTTClient();
+
 
   /*
     Creation of Queues
@@ -169,12 +183,13 @@ void InitializationTask(void *pvParam) {
     //  Serial.println(isTimerTwoExpired);
       if (periodicTimerCheck - periodicTimerTwo > PERIODIC_RECONNECT_TIMEOUT) {
         periodicTimerTwo = periodicTimerCheck;
-        if (!client.connected()) {
+        if (!GetMQTTClientConnectionStatus()) {
           MQTTreconnect();
         }
       }
 
-      client.loop();
+      // client.loop();
+      MQTTRefreshConnection();
 
       if (periodicTimerCheck - periodicTimer > PERIODIC_MESSAGE_TIMEOUT) {
         periodicTimer = periodicTimerCheck;
@@ -220,47 +235,6 @@ void InitializationTask(void *pvParam) {
   }
 }
 
-
-void MQTT_Task(void *pvParam) {
-  unsigned long mqttReconnectionTime;
-  Struct_MQTT mqttData;
-  //gUartMessage mqttData;
-  char dataArray[100];
-  char result[100];
-  while (1) {
-    while ((GetMQTTConnectionStatus() == true) && (GetIsWiFiConnected() == true)) {
-      if (xQueueReceive(mqttQueue, (void *)&mqttData, portMAX_DELAY) == pdTRUE) {
-        //        result = (char *)pvPortMalloc(strlen(dataArray) + 1);
-        switch ((mqttData.ID)) {
-          case IDPUBLISHMQTT:
-            //  Serial.print("ID Publish MQTT");
-            memset(dataArray, 0, 100);
-            snprintf(dataArray, 100, "%s/%s", mqtt_ID, mqttData.topic);
-            client.publish(dataArray, mqttData.payload);
-            break;
-
-          case IDSUBSCRIBEMQTT:
-
-            Serial.println("ID Subscribe MQTT");
-            memset(dataArray, 0, 100);
-
-            snprintf(dataArray, sizeof dataArray, "%s/%s", mqtt_ID, mqttData.topic);
-            client.subscribe(dataArray);
-            Serial.println(dataArray);
-            break;
-
-          case IDPUBLISH_INPUT:
-            break;
-
-          case IDPUBLISH_SYSTEM:
-            break;
-        }
-      }
-    }
-    // Yielding the task in case of Connection not established
-    vTaskDelay(pdMS_TO_TICKS(10));
-  }
-}
 
 void CallbackTask(void *pvParam) {
   while (1) {
@@ -364,20 +338,20 @@ void OutputTask(void *pvParam) {
 
 
 
-void OLED_DisplayTask(void *pvParam) {
-  gUartMessage receiveMsg;
-  char tempString[100];
-  while (1) {
-    if (xQueueReceive(oledQueue, (void *)&receiveMsg, portMAX_DELAY) == pdTRUE) {
-      Serial.print("Oled print: ");
-      Serial.println(receiveMsg.body);
-      // sprintf(tempString, "Writing oled %s", receiveMsg.body);
-      //      writeQueue(tempString);
-      Oled.displayln(receiveMsg.body);
-    }
-    vTaskDelay(DELAY_10MS);
-  }
-}
+// void OLED_DisplayTask(void *pvParam) {
+//   gUartMessage receiveMsg;
+//   char tempString[100];
+//   while (1) {
+//     if (xQueueReceive(oledQueue, (void *)&receiveMsg, portMAX_DELAY) == pdTRUE) {
+//       Serial.print("Oled print: ");
+//       Serial.println(receiveMsg.body);
+//       // sprintf(tempString, "Writing oled %s", receiveMsg.body);
+//       //      writeQueue(tempString);
+//       Oled.displayln(receiveMsg.body);
+//     }
+//     vTaskDelay(DELAY_10MS);
+//   }
+// }
 
 
 void InputTask(void *pvParam) {
@@ -516,82 +490,7 @@ void loop() {
 }
 
 
-void callback(char *topic, byte *payload, unsigned int length) {
 
-  // Clearing the global string buffers
-  memset(callback_data.topic, 0, 100);
-  memset(callback_data.payload, 0, 500);
-  //Conver *byte to char*
-  payload[length] = '\0';  //First terminate payload with a NULL
-  // Break topic down
-  Serial.print("Message arrived: ");
-  Serial.print(topic);
-
-  for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
-    callback_data.payload[i] = (char)payload[i];
-  }
-  Serial.println();
-
-  memcpy(callback_data.payload, payload, length);
-  memcpy(callback_data.topic, topic, strlen(topic));
-
-  Serial.print("Payload:");
-  Serial.println(callback_data.payload);
-  Serial.print(" Topic:");
-  Serial.println(callback_data.topic);
-  callback_data.dataArrives = true;
-}
-
-void subscribeMQTT(char *topic) {
-  char dataArray[30];
-  snprintf(dataArray, sizeof dataArray, "%s/%s", mqtt_ID, topic);
-
-
-  client.subscribe(dataArray);
-  Serial.println(dataArray);
-}
-
-void reSubscribe() {
-  SendOLEDMessageFromInit("Subscribing...");
-  Serial.println("Subscribing...");
-  subscribeMQTT("timer");
-  subscribeMQTT("output");
-  subscribeMQTT("system");
-  subscribeMQTT("set");
-  subscribeMQTT("get");
-}
-
-int reconnectCounter = 0;
-
-void MQTTreconnect() {
-  // Loop until we're reconnected
-  Serial.println("Attempting MQTT");
-  SendOLEDMessageFromInit("Attempting MQTT");
-  String clientId = "MQTTClient-";
-  clientId += 90;
-  // Attempt to connect
-  if (client.connect(clientId.c_str(), mqtt_username, mqtt_password)) {  //(client.connect(clientId.c_str())) {
-    reSubscribe();
-    reconnectCounter = 0;  // reset counter
-    Serial.println("MQTT Connected");
-    SendOLEDMessageFromInit("MQTT Connected");
-    SetMQTTConnectionStatus(true);
-  }
-  else if (reconnectCounter > 500) {
-    Serial.println("Resetting ESP32");
-    delay(500);
-    ESP.restart();
-  }
-  else {
-    reconnectCounter++;
-    Serial.print("Attempt: ");
-    Serial.print(reconnectCounter);
-    Serial.print(" failed, Error: ");
-    Serial.print(client.state());
-    Serial.print(" Retrying in 5 seconds");
-  }
-}
 
 void SendMessageToOutputTaskInit(enum enumOutTask y) {
   outputStructDataInitialization.ID = y;
@@ -668,4 +567,14 @@ void SetMQTTConnectionStatus(bool value) {
 
 bool GetMQTTConnectionStatus(void) {
   return isMQTTConnectionEstablished;
+}
+
+
+
+// Timer Callbacks
+void timerTwoCallback(TimerHandle_t timerTwoOneShotHandler) {
+  // This is the Callback Function
+  // The callback function is used to count the x number of seconds and signals the task if the timer expires
+  //  Serial.println("Timer Expired");
+  isTimerTwoExpired = true;
 }

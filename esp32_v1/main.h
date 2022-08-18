@@ -5,8 +5,8 @@
 #define DYNAMIC_WIFI
 
 // For Static Configuration Please enter the credentials here
-const char *ssid = "Star";
-const char *password = "12345678";
+// const char *ssid = "Star";
+// const char *password = "12345678";
 
 
 /*
@@ -113,19 +113,14 @@ typedef struct Message
 } gUartMessage;
 
 
-// MQTT Queue
-QueueHandle_t mqttQueue;
-// Handles for Queues
-QueueHandle_t serialWriteQueue;
-// oled Queue
-QueueHandle_t oledQueue;
-// output Queue
-QueueHandle_t outputQueue;
 
 
 
 
-
+////////////////////////////////////////////////
+// OLED Task Functions
+///////////////////////////////////////////////
+void BeginOledDisplay(void);
 
 
 

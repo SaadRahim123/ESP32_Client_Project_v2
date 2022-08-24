@@ -395,7 +395,7 @@ void InputTask(void *pvParam) {
       // Only publish input message if switched on
       if (GetPublishInputMessageEnable() && GetIsWiFiConnected()) {
         publishMQTTMessage("input", inputMessage);
-        Serial.println(inputMessage);
+        // Serial.println(inputMessage);
       }
     }
     //

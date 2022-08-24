@@ -57,8 +57,12 @@ class _Input {
           strcpy(stringToReturn, msg);
           //   }
         }
+        else
+        {
+          strcpy(stringToReturn, "none");
+        }
       }
-      strcpy(stringToReturn, "none");
+      
     }
 
   public:

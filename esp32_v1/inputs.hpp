@@ -55,14 +55,13 @@ class _Input {
           char msg[32];
           snprintf(msg, sizeof msg, "%s/%d", inputData[i].inputName, inputData[i].inputState);          // Copy char array to a char pointer so return a pointer
           strcpy(stringToReturn, msg);
-          //   }
+          
+          return ;
         }
-        else
-        {
-          strcpy(stringToReturn, "none");
-        }
+        
       }
-      
+      strcpy(stringToReturn, "none");
+      return ;
     }
 
   public:

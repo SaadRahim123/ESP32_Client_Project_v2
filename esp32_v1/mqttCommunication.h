@@ -27,5 +27,3 @@ void MQTTRefreshConnection(void);
 //  This function is used to reconnect to the MQTT broker
 //------------------------------------------------------------------------------
 void MQTTreconnect(void);
-
-

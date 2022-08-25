@@ -30,7 +30,7 @@ static void reSubscribe();
 // MQTT Broker
 const char *mqtt_broker = "broker.emqx.io";
 const int mqtt_port = 1883;
-const char *mqtt_ID = "esp32a01";
+const char *mqtt_ID = "e2G3f5";
 // MQTT Credentials
 const char *mqtt_username = "remote2";
 const char *mqtt_password = "password2";
@@ -65,6 +65,9 @@ void MQTT_Task(void *pvParam) {
             memset(dataArray, 0, 100);
             snprintf(dataArray, 100, "%s/%s", mqtt_ID, mqttData.topic);
             client.publish(dataArray, mqttData.payload);
+            Serial.print(dataArray);
+            Serial.print("/");
+            Serial.println(mqttData.payload);
             break;
 
           case IDSUBSCRIBEMQTT:
@@ -294,7 +297,3 @@ void MQTTRefreshConnection(void)
 {
   client.loop();
 }
-
-
-
-

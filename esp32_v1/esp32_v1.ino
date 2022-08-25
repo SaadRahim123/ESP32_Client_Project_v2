@@ -1,21 +1,15 @@
 #include <PubSubClient.h>
 #include "WiFi.h"
 #include "settings.hpp"
-
 #include "outputs.hpp"
 #include "inputs.hpp"
 #include "wifi.hpp"
-// #include "memory.hpp"
 #include "main.h"
 #include "mqttCommunication.h"
-
 
 _Wifi Wifi;
 _Output Output;
 _Input Input;
-// _Memory Memory;
-
-
 
 //------------------------------------------------------------------------------
 // Preprocessors
@@ -67,9 +61,6 @@ void OLED_DisplayTask(void *pvParam);
 void CallbackTask(void *pvParam);
 void InputTask(void *pvParam);
 
-
-
-
 //------------------------------------------------------------------------------
 // Task Handlers
 //------------------------------------------------------------------------------
@@ -87,8 +78,6 @@ QueueHandle_t serialWriteQueue;
 QueueHandle_t oledQueue;
 // output Queue
 QueueHandle_t outputQueue;
-
-
 
 //------------------------------------------------------------------------------
 // This is the Setup Task for Arduino
@@ -110,31 +99,25 @@ void setup() {
   isWiFiConnected = Wifi.connect();
 #else
   WiFi.mode(WIFI_AP_STA);
-  WiFi.begin(ssid, password);
+  WiFi.begin(wifi_ssid, wifi_password);
   Serial.println("Connecting to WiFi..");
   while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    delay(1000);
+    //    Serial.print(".");
+    //    delay(1000);
   }
   SetIsWiFiConnected(true);
 #endif
   Serial.println("Connected ");
   InitMQTTClient();
 
-
-  /*
-    Creation of Queues
-  */
+  // Creation of Queues
   serialWriteQueue = xQueueCreate(100, sizeof(gUartMessage));
   oledQueue = xQueueCreate(10, sizeof(gUartMessage));
   mqttQueue = xQueueCreate(200, sizeof(Struct_MQTT));
   outputQueue = xQueueCreate(100, sizeof(Struct_Output));
 
-  /*
-    Creation of Timers
-  */
-  timerTwoOneShotHandler = xTimerCreate("Timer two", pdMS_TO_TICKS(3000), 0, (void *)0, timerTwoCallback);
-
+  // Creation of Timers
+  timerTwoOneShotHandler = xTimerCreate("Timer two", pdMS_TO_TICKS(TIMER), 0, (void *)0, timerTwoCallback);
 
   // Initialization Task
   xTaskCreatePinnedToCore(InitializationTask, "Initialization Task", 5120, NULL, 5, &Initialization_Task_Handler, 0);
@@ -151,7 +134,6 @@ void setup() {
   // Internet Task
 }
 
-
 void getUptime() {
   unsigned long timeNow;
   timeNow = millis();
@@ -164,7 +146,6 @@ void getUptime() {
   sprintf(Time_t.timeStr, "%02d %02d:%02d:%02d", Time_t.days, Time_t.hours, Time_t.minutes, Time_t.seconds);
   // Serial.println(Time_t.timeStr);  // Uncomment to serial print
 }
-
 
 void InitializationTask(void *pvParam) {
   //  Struct_MQTT mqttSendDataBuffer;
@@ -180,7 +161,7 @@ void InitializationTask(void *pvParam) {
   while (1) {
     periodicTimerCheck = millis();
     if (GetIsWiFiConnected()) {
-    //  Serial.println(isTimerTwoExpired);
+      //  Serial.println(isTimerTwoExpired);
       if (periodicTimerCheck - periodicTimerTwo > PERIODIC_RECONNECT_TIMEOUT) {
         periodicTimerTwo = periodicTimerCheck;
         if (!GetMQTTClientConnectionStatus()) {
@@ -270,27 +251,10 @@ void OutputTask(void *pvParam) {
 }
 
 
-
-// void OLED_DisplayTask(void *pvParam) {
-//   gUartMessage receiveMsg;
-//   char tempString[100];
-//   while (1) {
-//     if (xQueueReceive(oledQueue, (void *)&receiveMsg, portMAX_DELAY) == pdTRUE) {
-//       Serial.print("Oled print: ");
-//       Serial.println(receiveMsg.body);
-//       // sprintf(tempString, "Writing oled %s", receiveMsg.body);
-//       //      writeQueue(tempString);
-//       Oled.displayln(receiveMsg.body);
-//     }
-//     vTaskDelay(DELAY_10MS);
-//   }
-// }
-
-
 void InputTask(void *pvParam) {
   Struct_Output outputQueueData;
   char inputMessage[100];
-  uint8_t buttonCounter = 0;
+  uint8_t buttonCounter = 1;
   unsigned int revTime;
   unsigned long lastTachoTime = 0;
   unsigned long timeNow;
@@ -302,12 +266,19 @@ void InputTask(void *pvParam) {
   enum Button outputButton;
   while (1) {
 
+    //------------------------------------------------------------------------------
+    // Process Push Buttons
+    //------------------------------------------------------------------------------
+
     timeNow = millis();
     buttonValue = analogRead(BUTTONS);
     //    Serial.print("AnalogRead: ");
     //    Serial.println(buttonValue);              // Uncomment to print button value
     if (buttonValue > lastButtonValue + 100 || buttonValue < lastButtonValue - 100) {  // if the button state has changed
-      lastDebounceTime = timeNow;                                                      // Start the timer
+      if (buttonValue == 0 && timeNow - lastDebounceTime > 5000) {        // If button is released after a long press
+        Wifi.resetAP();
+      }
+      lastDebounceTime = timeNow;
     }
 
     if (buttonValue == 0) {
@@ -315,16 +286,20 @@ void InputTask(void *pvParam) {
     }
     if ((timeNow - lastDebounceTime) > settings["debounce"]) {
       if (pushed == false && buttonValue > 0) {
-        if (buttonValue > 3200 && buttonValue < 3600) {         // AE-01 Settings
+        if (buttonValue > 3000 && buttonValue < 3600) {         // AE-01 Settings
           Serial.println("Button SELECT pressed");
+          PublishMQTTInputMessage("button", "SELECT");
           pushed = true;
           outputButton = SELECT;
-        } else if (buttonValue > 2200 && buttonValue < 2500) {  // AE-01 Settings
+
+        } else if (buttonValue > 2000 && buttonValue < 2500) {  // AE-01 Settings
           Serial.println("Button DOWN pressed");
+          PublishMQTTInputMessage("button", "DOWN");
           pushed = true;
           outputButton = DOWN;
-        } else if (buttonValue > 1500 && buttonValue < 1700) {  // AE-01 Settings
+        } else if (buttonValue > 1000 && buttonValue < 1700) {  // AE-01 Settings
           Serial.println("Button UP pressed");
+          PublishMQTTInputMessage("button", "UP");
           pushed = true;
           outputButton = UP;
         }
@@ -337,22 +312,17 @@ void InputTask(void *pvParam) {
     lastButtonValue = buttonValue;  // Update
 
     if (outputButton == SELECT) {
-      Serial.println("Button SELECT pressed");
-      PublishMQTTInputMessage("button", "SELECT");
       SendMessageToOutputTask("output", "transZero", START_OUT);
     }
 
-    if (GetPublishInputMessageEnable()) {  // Only publish if switched on
-      Input.update(inputMessage);
-      if (inputMessage != "none") {
-        PublishMQTTInputMessage("input", inputMessage);
-      }
-    }
+    //------------------------------------------------------------------------------
+    // Process GPIO Inputs
+    //------------------------------------------------------------------------------
 
-    // Getting the time
-    timeNow = millis();
     Input.update(inputMessage);
-    if (inputMessage != "none") {
+    if (strcmp(inputMessage, "none") != 0) {
+      // Publish the input message first
+      PublishMQTTInputMessage("input", inputMessage);
 
       if (strcmp(inputMessage, "inFive/1") == 0) {
         if (buttonCounter > 3) {
@@ -371,7 +341,7 @@ void InputTask(void *pvParam) {
       }
 
       if (strcmp(inputMessage, "inSix/1") == 0) {
-        SendMessageToOutputTask("output", "transOne", START_OUT);
+        SendMessageToOutputTask("output", "transZero", START_OUT);
       }
 
       if (strcmp(inputMessage, "inOne/1") == 0) {
@@ -392,37 +362,30 @@ void InputTask(void *pvParam) {
         }
         lastTachoTime = timeNow;  // Update timer
       }
-      // Only publish input message if switched on
-      if (GetPublishInputMessageEnable() && GetIsWiFiConnected()) {
-        publishMQTTMessage("input", inputMessage);
-        // Serial.println(inputMessage);
-      }
     }
-    //
-    //    if ((isTimerTwoExpired == false) && (isTimerStartRequested == false)) {
-    //      // Start the timer
-    //      xTimerStart(timerTwoOneShotHandler, 1);
-    //      isTimerStartRequested = true;
-    //      if (GetIsWiFiConnected()) {
-    //        PublishMQTTInputMessage("input", "inZero/0");
-    //      }
-    //    }
-    //
-    //    if (isTimerTwoExpired == true) {
-    //      SendMessageToOutputTask("output", "relayThree", START_OUT);
-    //      isTimerTwoExpired = false;
-    //      isTimerStartRequested = false;
-    //      if (GetIsWiFiConnected()) {
-    //        PublishMQTTInputMessage("input", "inZero/1");
-    //      }
-    //    }
+
+    //------------------------------------------------------------------------------
+    // Process Timers
+    //------------------------------------------------------------------------------
+
+
+    if ((isTimerTwoExpired == false) && (isTimerStartRequested == false)) {
+      // Start the timer
+      xTimerStart(timerTwoOneShotHandler, 1);
+      isTimerStartRequested = true;
+    }
+
+    if (isTimerTwoExpired == true) {
+      SendMessageToOutputTask("output", "transZero", START_OUT);
+      isTimerTwoExpired = false;
+      isTimerStartRequested = false;
+    }
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
+
 void loop() {
 }
-
-
 
 
 void SendMessageToOutputTaskInit(enum enumOutTask y) {
@@ -461,7 +424,6 @@ void publishMQTTPeriodicMessage(char topic[], char payload[]) {
     xQueueSend(mqttQueue, (void *)&mqttSendDataPeriodicBuffer, portMAX_DELAY);
   }
 }
-
 
 void publishMQTTMessage(char topic[], char payload[]) {
   memset(mqttSendDataBuffer.topic, 0, 100);

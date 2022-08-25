@@ -21,7 +21,7 @@ outputData[NUM_OUTPUTS] = {
   "relayFour", 2, false, false, 0,
   "relayFive", 33, false, false, 0,
   "transZero", 27, false, false, 0,
-  "transOne", 26, false, false, 0
+  "transOne", 26, true, false, 0
 };
 
 using namespace std;

@@ -2,17 +2,18 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define DYNAMIC_WIFI
+//#define DYNAMIC_WIFI
 
 // For Static Configuration Please enter the credentials here
-// const char *ssid = "Star";
-// const char *password = "12345678";
-
+#define wifi_ssid         "Jailmake"
+#define wifi_password     "87654321"
 
 /*
     Defines
 */
 #define DEBUG_ENABLE
+
+#define TIMER           10000
 
 #define TEN_MILL        10
 #define FIVE_HUN_MILL   500

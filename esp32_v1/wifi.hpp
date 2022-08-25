@@ -18,7 +18,7 @@ class _Wifi {
       //wifiManager.resetSettings();
       SetWiFiBlockingState(false);
       wifiManager.setConfigPortalBlocking(isWiFiBlockingState);
-      wifiManager.setConfigPortalTimeout(180);
+      wifiManager.setConfigPortalTimeout(30);
       delay(500);
       if (wifiManager.autoConnect("ESP32")) {  //automatically connect using saved credentials if connection fails it starts an access point
         Serial.print("Connected to IP address: ");
@@ -63,6 +63,8 @@ class _Wifi {
 
     void resetAP() {
        wifiManager.resetSettings();
+       delay(500);
+       ESP.restart();
     }
 
   public:

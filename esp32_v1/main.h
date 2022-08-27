@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
-
+#include "EthCommunication.h"
 //#define DYNAMIC_WIFI
 
 // For Static Configuration Please enter the credentials here
@@ -73,6 +73,14 @@ enum enumOutTask
   UPDATE_OUT
 };
 
+
+enum CommunicationInterface
+{
+  COMMUNICATION_NONE = 0,
+  COMMUNICATION_ETHERNET,
+  COMMUNICATION_WIFI_STATIC,
+  COMMUNICATION_WIFI_DYNAMIC
+};
 /*
     Structures
 */
@@ -83,6 +91,13 @@ struct callbackStruct
   char topic[100];
   bool dataArrives;
 };
+
+// Communication interface struct
+typedef struct COMM_struct
+{
+  enum CommunicationInterface interface;
+} Communication_struct;
+
 
 typedef struct time_struct
 {
@@ -123,7 +138,7 @@ typedef struct Message
 ///////////////////////////////////////////////
 void BeginOledDisplay(void);
 
-
+void OLED_Displayln(char msg[]);
 
 
 // Function prototypes
@@ -167,3 +182,6 @@ void EraseMemory(void);
 
 // This function is used to init Memory
 void MemoryInit();
+
+// This function is used to fetch the active interface
+CommunicationInterface GetActiveInterface(void);

@@ -23,6 +23,10 @@ void OLED_DisplayTask(void *pvParam) {
   }
 }
 
+void OLED_Displayln(char msg[])
+{
+  Oled.displayln(msg);
+}
 
 void BeginOledDisplay(void)
 {

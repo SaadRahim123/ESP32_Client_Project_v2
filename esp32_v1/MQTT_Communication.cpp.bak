@@ -107,7 +107,7 @@ void MemoryInit()
 //------------------------------------------------------------------------------
 void CallbackTask(void *pvParam) {
 
-
+  
   while (1) {
 
     if ((callback_data.dataArrives)) {
@@ -139,12 +139,9 @@ void CallbackTask(void *pvParam) {
         publishMQTTMessage("reply", reply);
       }
 
-      // The set and get works with out a payload
       if (strcmp(payloadFunc, "output") == 0) {
-        if (payloadData != NULL) {
-          SendMessageToOutputTask(callback_data.payload, payloadData, PROCESS_OUT);
-          Serial.println("Callback Data output ");
-        }
+        SendMessageToOutputTask(callback_data.payload, payloadData, PROCESS_OUT);
+        Serial.println("Callback Data output ");
       }
 
       if (strcmp(payloadFunc, "timer") == 0) {
@@ -219,11 +216,10 @@ void MQTTreconnect() {
   // Loop until we're reconnected
   Serial.println("Attempting MQTT");
   SendOLEDMessageFromInit("Attempting MQTT");
-  // Can we put this up here?
-  //clientId += 92;
-  // mqtt_ID  // Like that? it will work.. give it a try ok how come it has to be a c_str ?dnt check that
+  String clientId = "MQTTClient-";
+  clientId += 90;
   // Attempt to connect
-  if (client.connect(mqtt_ID, mqtt_username, mqtt_password)) {  //(client.connect(clientId.c_str())) {
+  if (client.connect(clientId.c_str(), mqtt_username, mqtt_password)) {  //(client.connect(clientId.c_str())) {
     reSubscribe();
     reconnectCounter = 0;  // reset counter
     Serial.println("MQTT Connected");

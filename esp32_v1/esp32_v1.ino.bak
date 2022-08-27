@@ -297,7 +297,7 @@ void InputTask(void *pvParam) {
     //    Serial.print("AnalogRead: ");
     //    Serial.println(buttonValue);              // Uncomment to print button value
     if (buttonValue > lastButtonValue + 100 || buttonValue < lastButtonValue - 100) {  // if the button state has changed
-      if (buttonValue == 0 && timeNow - lastDebounceTime > 5000) {        // If button is released after a long press
+      if (buttonValue == 0 && timeNow - lastDebounceTime > 5000) {                     // If button is released after a long press
         Wifi.resetAP();
       }
       lastDebounceTime = timeNow;
@@ -308,7 +308,7 @@ void InputTask(void *pvParam) {
     }
     if ((timeNow - lastDebounceTime) > settings["debounce"]) {
       if (pushed == false && buttonValue > 0) {
-        if (buttonValue > 3000 && buttonValue < 3600) {         // AE-01 Settings
+        if (buttonValue > 3000 && buttonValue < 3600) {  // AE-01 Settings
           Serial.println("Button SELECT pressed");
           PublishMQTTInputMessage("button", "SELECT");
           pushed = true;
@@ -325,8 +325,7 @@ void InputTask(void *pvParam) {
           pushed = true;
           outputButton = UP;
         }
-      }
-      else {
+      } else {
         outputButton = NONE;
         //  Serial.println("Button NONE");
       }

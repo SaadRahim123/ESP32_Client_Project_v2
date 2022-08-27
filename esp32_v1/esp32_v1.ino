@@ -105,7 +105,7 @@ void setup() {
     Serial.println("Checking the Ethernet Interface");
     OLED_Displayln("No Issue with Ethernet Modem");
     OLED_Displayln("Checking Internet Connectivity");
-    
+
     if (false == TestEthernetConnection()) {
 
     } else {
@@ -186,10 +186,11 @@ void InitializationTask(void *pvParam) {
   char rpmChr[30];
   while (1) {
     periodicTimerCheck = millis();
-    if (GetIsWiFiConnected() || ActiveInterface.interface == COMMUNICATION_ETHERNET) {
+    if ((GetIsWiFiConnected() == true ) || (ActiveInterface.interface == COMMUNICATION_ETHERNET)) {
       //  Serial.println(isTimerTwoExpired);
       if (periodicTimerCheck - periodicTimerTwo > PERIODIC_RECONNECT_TIMEOUT) {
         periodicTimerTwo = periodicTimerCheck;
+       // Serial.println("Checking MQTT");
         if (!GetMQTTClientConnectionStatus()) {
           MQTTreconnect();
         }
@@ -215,7 +216,7 @@ void InitializationTask(void *pvParam) {
       periodicTimerOutput = periodicTimerCheck;
       SendMessageToOutputTaskInit(UPDATE_OUT);
     }
-    if ((Wifi.GetWiFiBlockingState() == false) && GetIsWiFiConnected() == false) {
+    if ((Wifi.GetWiFiBlockingState() == false) && GetIsWiFiConnected() == false && (ActiveInterface.interface != COMMUNICATION_ETHERNET)) {
       if (oledMessageAccessPointStartedSent == false) {
         SendOLEDMessageFromInit("Access Point Started");
         SendOLEDMessageFromInit("SSID: ESP32");
@@ -224,20 +225,21 @@ void InitializationTask(void *pvParam) {
       }
       Wifi.process();
     }
-    if (WiFi.status() == WL_CONNECTED) {
-      if (oledMessageWifiConnected == false) {
-        SendOLEDMessageFromInit("WiFi Connected");
-        SetIsWiFiConnected(true);
-        oledMessageWifiConnected = true;
+    if ((ActiveInterface.interface != COMMUNICATION_ETHERNET)) {
+      if (WiFi.status() == WL_CONNECTED) {
+        if (oledMessageWifiConnected == false) {
+          SendOLEDMessageFromInit("WiFi Connected");
+          SetIsWiFiConnected(true);
+          oledMessageWifiConnected = true;
+        }
+      } else {
+        SetIsWiFiConnected(false);
+        oledMessageWifiConnected = false;
       }
-    } else {
-      SetIsWiFiConnected(false);
-      oledMessageWifiConnected = false;
     }
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
-
 
 
 
@@ -297,7 +299,7 @@ void InputTask(void *pvParam) {
     //    Serial.print("AnalogRead: ");
     //    Serial.println(buttonValue);              // Uncomment to print button value
     if (buttonValue > lastButtonValue + 100 || buttonValue < lastButtonValue - 100) {  // if the button state has changed
-      if (buttonValue == 0 && timeNow - lastDebounceTime > 5000) {        // If button is released after a long press
+      if (buttonValue == 0 && timeNow - lastDebounceTime > 5000) {                     // If button is released after a long press
         Wifi.resetAP();
       }
       lastDebounceTime = timeNow;
@@ -308,7 +310,7 @@ void InputTask(void *pvParam) {
     }
     if ((timeNow - lastDebounceTime) > settings["debounce"]) {
       if (pushed == false && buttonValue > 0) {
-        if (buttonValue > 3000 && buttonValue < 3600) {         // AE-01 Settings
+        if (buttonValue > 3000 && buttonValue < 3600) {  // AE-01 Settings
           Serial.println("Button SELECT pressed");
           PublishMQTTInputMessage("button", "SELECT");
           pushed = true;
@@ -325,8 +327,7 @@ void InputTask(void *pvParam) {
           pushed = true;
           outputButton = UP;
         }
-      }
-      else {
+      } else {
         outputButton = NONE;
         //  Serial.println("Button NONE");
       }
@@ -344,7 +345,7 @@ void InputTask(void *pvParam) {
     Input.update(inputMessage);
     if (strcmp(inputMessage, "none") != 0) {
       // Publish the input message first
-      PublishMQTTInputMessage("input", inputMessage);
+    //  PublishMQTTInputMessage("input", inputMessage);
 
       if (strcmp(inputMessage, "inFive/1") == 0) {
         if (buttonCounter > 3) {
@@ -391,17 +392,17 @@ void InputTask(void *pvParam) {
     //------------------------------------------------------------------------------
 
 
-    if ((isTimerTwoExpired == false) && (isTimerStartRequested == false)) {
-      // Start the timer
-      xTimerStart(timerTwoOneShotHandler, 1);
-      isTimerStartRequested = true;
-    }
+    // if ((isTimerTwoExpired == false) && (isTimerStartRequested == false)) {
+    //   // Start the timer
+    //   xTimerStart(timerTwoOneShotHandler, 1);
+    //   isTimerStartRequested = true;
+    // }
 
-    if (isTimerTwoExpired == true) {
-      SendMessageToOutputTask("output", "transZero", START_OUT);
-      isTimerTwoExpired = false;
-      isTimerStartRequested = false;
-    }
+    // if (isTimerTwoExpired == true) {
+    //   SendMessageToOutputTask("output", "transZero", START_OUT);
+    //   isTimerTwoExpired = false;
+    //   isTimerStartRequested = false;
+    // }
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
@@ -431,7 +432,8 @@ void PublishMQTTInputMessage(char topic[], char payload[]) {
   sprintf(mqttSendInputMessage.topic, topic);
   sprintf(mqttSendInputMessage.payload, payload);
   mqttSendInputMessage.ID = IDPUBLISHMQTT;
-  if (GetIsWiFiConnected() == true) {
+
+  if ((GetIsWiFiConnected() == true) || (ActiveInterface.interface == COMMUNICATION_ETHERNET)) {
     xQueueSend(mqttQueue, (void *)&mqttSendInputMessage, portMAX_DELAY);
   }
 }
@@ -442,7 +444,7 @@ void publishMQTTPeriodicMessage(char topic[], char payload[]) {
   sprintf(mqttSendDataPeriodicBuffer.topic, topic);
   sprintf(mqttSendDataPeriodicBuffer.payload, payload);
   mqttSendDataPeriodicBuffer.ID = IDPUBLISHMQTT;
-  if (GetIsWiFiConnected() == true) {
+  if ((GetIsWiFiConnected() == true) || (ActiveInterface.interface == COMMUNICATION_ETHERNET)) {
     xQueueSend(mqttQueue, (void *)&mqttSendDataPeriodicBuffer, portMAX_DELAY);
   }
 }
@@ -453,7 +455,8 @@ void publishMQTTMessage(char topic[], char payload[]) {
   sprintf(mqttSendDataBuffer.topic, topic);
   sprintf(mqttSendDataBuffer.payload, payload);
   mqttSendDataBuffer.ID = IDPUBLISHMQTT;
-  if (GetIsWiFiConnected() == true) {
+  
+  if ((GetIsWiFiConnected() == true) || (ActiveInterface.interface == COMMUNICATION_ETHERNET)) {
     xQueueSend(mqttQueue, (void *)&mqttSendDataBuffer, portMAX_DELAY);
   }
 }
@@ -488,8 +491,7 @@ bool GetMQTTConnectionStatus(void) {
   return isMQTTConnectionEstablished;
 }
 
-CommunicationInterface GetActiveInterface(void)
-{
+CommunicationInterface GetActiveInterface(void) {
   return ActiveInterface.interface;
 }
 // Timer Callbacks

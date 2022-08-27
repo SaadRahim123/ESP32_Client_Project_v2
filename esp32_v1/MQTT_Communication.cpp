@@ -32,11 +32,11 @@ static void reSubscribe();
 // MQTT Broker
 const char *mqtt_broker = "broker.emqx.io";
 const int mqtt_port = 1883;
-const char *mqtt_ID = "e2G3f5";
+const char *mqtt_ID = "esp32a02";
 // MQTT Credentials
 const char *mqtt_username = "remote2";
 const char *mqtt_password = "password2";
-const char *mqtt_client = "ESP32A01";
+const char *mqtt_client = "ESP32A02";
 
 //------------------------------------------------------------------------------
 // Extern Functions and others
@@ -58,12 +58,12 @@ void MQTT_Task(void *pvParam) {
   char dataArray[100];
   char result[100];
   while (1) {
-    while ((GetMQTTConnectionStatus() == true) && (GetIsWiFiConnected() == true)) {
+    while ((GetMQTTConnectionStatus() == true) && ((GetIsWiFiConnected() == true) || (GetActiveInterface() == COMMUNICATION_ETHERNET)) ) {
       if (xQueueReceive(mqttQueue, (void *)&mqttData, portMAX_DELAY) == pdTRUE) {
         //        result = (char *)pvPortMalloc(strlen(dataArray) + 1);
         switch ((mqttData.ID)) {
           case IDPUBLISHMQTT:
-            //  Serial.print("ID Publish MQTT");
+             Serial.print("ID Publish MQTT");
             memset(dataArray, 0, 100);
             snprintf(dataArray, 100, "%s/%s", mqtt_ID, mqttData.topic);
             client.publish(dataArray, mqttData.payload);
@@ -281,6 +281,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
 void InitMQTTClient(void) {
   if(GetActiveInterface() == COMMUNICATION_ETHERNET)
   {
+    Serial.println("here");
   client.setClient(espEthClient);
   client.setServer(mqtt_broker, 1883);
   client.setCallback(callback);    

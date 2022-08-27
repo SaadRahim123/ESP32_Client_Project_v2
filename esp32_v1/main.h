@@ -5,8 +5,8 @@
 //#define DYNAMIC_WIFI
 
 // For Static Configuration Please enter the credentials here
-#define wifi_ssid         "Jailmake"
-#define wifi_password     "87654321"
+#define wifi_ssid         "PTCL-I80"
+#define wifi_password     "sherlocked"
 
 /*
     Defines

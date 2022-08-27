@@ -345,7 +345,7 @@ void InputTask(void *pvParam) {
     Input.update(inputMessage);
     if (strcmp(inputMessage, "none") != 0) {
       // Publish the input message first
-    //  PublishMQTTInputMessage("input", inputMessage);
+      PublishMQTTInputMessage("input", inputMessage);
 
       if (strcmp(inputMessage, "inFive/1") == 0) {
         if (buttonCounter > 3) {
@@ -403,7 +403,7 @@ void InputTask(void *pvParam) {
     //   isTimerTwoExpired = false;
     //   isTimerStartRequested = false;
     // }
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
 

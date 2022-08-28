@@ -86,8 +86,9 @@ QueueHandle_t outputQueue;
 // This is the Setup Task for Arduino
 //------------------------------------------------------------------------------
 void setup() {
+  uint8_t wifiStaticReconnectCounter = 0;
   // put your setup code here, to run once:
-  Serial.begin(115200);
+  Serial.begin(115200);  
   Wire.begin(SDA_PIN, SCL_PIN);  // this should be after Sensors.begin()
   // Initializing the peripherals
   MemoryInit();
@@ -123,9 +124,10 @@ void setup() {
     WiFi.mode(WIFI_STA);
     WiFi.begin(wifi_ssid, wifi_password);
     Serial.println("Connecting to WiFi..");
-    while (WiFi.status() != WL_CONNECTED) {
+    while ((WiFi.status() != WL_CONNECTED)  && (wifiStaticReconnectCounter <8)  ) {
       //    Serial.print(".");
-      //    delay(1000);
+         delay(1000);
+      wifiStaticReconnectCounter++;
     }
     SetIsWiFiConnected(true);
     ActiveInterface.interface = COMMUNICATION_WIFI_STATIC;
